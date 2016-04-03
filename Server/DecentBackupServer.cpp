@@ -20,6 +20,7 @@
 #include <string.h>
 #include<dirent.h>
 #include <algorithm> //for checking file extentions
+#include<vector>
 
 #include <sstream>
 
@@ -31,16 +32,13 @@
 #include <windows.h>
 #endif
 
-
-
-
 //usings
 using namespace std;
 
 /**************
 **	Globals  **
 **************/
-const char delimeter = ':';
+const char delimeter = ';';
 const string version = "0.0.1";//version number
 string logFileLoc = "DBSS_LOG.txt";//the log file
 string confFileLoc = "DBSS_CONF.txt";//the config file
@@ -51,7 +49,9 @@ string storFolderPred = "DBSS_stor_";// the filename predicate for storage folde
 string syncFolderLoc = syncFolderPred + "dir";
 string storFolderLoc = storFolderPred + "dir";
 
-const string clientConfigFileName = "DBSS_CLIENT_CONF.txt"; 
+const string clientConfigFileName = "DBSS_CLIENT_CONF.txt";
+const string clientSyncFileListName = "DBSS_STORED_FILES.txt";
+const string clientSyncGetFileList = "DBSS_TO_GET_LIST.txt";
 
 int checkInterval = 60;//in seconds
 
@@ -63,30 +63,38 @@ bool verbose = false;
 bool setToStartOnStart = false;
 
 /* for sync folder config */
-int numBackupsToKeepDef = 5;
+int numBackupsToKeepDef = -1;
 int numBackupsToKeep = numBackupsToKeepDef;
 
 /* Other */
-int transferWait = 1;
+int transferWait = 1;//seconds
 
 //sleep stuff/ other sys dependent stuff
 #ifdef __linux__
 const string foldSeparater = "/";
+const string nlc = "\n";
 #endif
 #ifdef _WIN32
 const string foldSeparater = "\\";
+const string nlc = "\r\n";
 #endif
 
-void mySleep(int sleepS){
-	int sleepMs = sleepS * 1000;
-	#ifdef __linux__
-		usleep(sleepMs * 1000);   // usleep takes sleep time in us (1 millionth of a second)
-	#endif
-	#ifdef _WIN32
-		Sleep(sleepMs);
-	#endif
+void mySleepMs(int sleepMs) {
+#ifdef __linux__
+	usleep(sleepMs * 1000);   // usleep takes sleep time in us (1 millionth of a second)
+#endif
+#ifdef _WIN32
+	Sleep(sleepMs);
+#endif
 }
 
+void mySleep(int sleepS){
+	mySleepMs(sleepS * 1000);
+}
+
+/**
+	Checks if the file path given is 
+ */
 bool checkFilePath(string pathIn, bool dir){
     //sendDebugMsg("Path Given: " + pathIn);
     bool worked = false;//if things worked
@@ -244,11 +252,83 @@ long getFileSize(string file){
 	return filestatus.st_size;
 }
 
+void refreshFileList(string storeDir, string syncListLoc) {
+	ofstream fileListFile(syncListLoc.c_str());
+	if (!fileListFile.good()) {
+		outputText(' ', "ERROR:: Unable to write to file list.", verbose, 3);
+		return;
+	}
+	DIR *pDIR;
+	struct dirent *entry;
+	if (pDIR = opendir(storeDir.c_str())) {
+		while (entry = readdir(pDIR)) {
+			if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+				//cout << entry->d_name << "\n";
+				fileListFile << entry->d_name << endl;
+			}
+
+		}
+		closedir(pDIR);
+	}
+	fileListFile.close();
+	return;
+}
+
+void getListOfFilesToGet(string syncRetrieveListLoc, vector<string>* toGetList) {
+	ifstream getListFile(syncRetrieveListLoc.c_str());
+	string fileToGet;
+
+	while (getListFile.good()) {
+		getline(getListFile, fileToGet, '\n');
+		fileToGet.erase(remove(fileToGet.begin(), fileToGet.end(), '\n'), fileToGet.end());
+		fileToGet.erase(remove(fileToGet.begin(), fileToGet.end(), '\r'), fileToGet.end());
+		if (fileToGet != "") {
+			//cout << "file to get: \"" << fileToGet << "\"" << endl;
+			toGetList->push_back(fileToGet);
+		}
+	}
+	getListFile.close();
+}
+
+void moveFilesToGet(string storageDir, string syncDir, vector<string>* toGetList) {
+	if (toGetList->size() == 0) {
+		outputText(' ', "No files to move.", verbose, 4);
+		return;
+	}
+	for (vector<string>::iterator it = toGetList->begin(); it != toGetList->end(); ++it) {
+		//cout << "Moving \"" + storageDir + foldSeparater + *it + "\"" << endl;
+		if (checkFilePath(syncDir + foldSeparater + *it, false)) {
+			outputText(' ', "\"" + storageDir + foldSeparater + *it + "\" already present in sync folder.", verbose, 4);
+			continue;
+		}
+
+		outputText(' ', "Moving \"" + storageDir + foldSeparater + *it + "\"...", verbose, 4);
+		if (checkFilePath(storageDir + foldSeparater + *it, false)) {
+			copyFile(storageDir + foldSeparater + *it, syncDir);
+		}else {
+			outputText(' ', "Invalid file location. Copy cancelled.", verbose, 5);
+		}
+		outputText(' ', "Done.", verbose, 4);
+	}
+}
+
 int searchInnerSyncDir(string dir){
 	//folder config vars
 	string syncConfigLoc = dir + foldSeparater + clientConfigFileName;
+	string syncFileListLoc = dir + foldSeparater + clientSyncFileListName;
+	string syncRetrieveListLoc = dir + foldSeparater + clientSyncGetFileList;
+
+	string thisStorageFolder = storFolderLoc + foldSeparater + getLastPartOfPath(dir);
+
+	vector<string> getList;
+	vector<string> ignoreList;
+	ignoreList.push_back(syncConfigLoc);
+	ignoreList.push_back(syncFileListLoc);
+	ignoreList.push_back(syncRetrieveListLoc);
+
+
 	numBackupsToKeep = numBackupsToKeepDef;
-	
+
 	//test if config present, make it if its not
 	if(!checkFilePath(syncConfigLoc, false) ){
 		outputText(' ', "**** Unable to open sync config file. Creating a new one (\""+ syncConfigLoc +"\")...", verbose, 3);
@@ -261,18 +341,51 @@ int searchInnerSyncDir(string dir){
 		}
 	}
 	readFolderConfig(syncConfigLoc);
-	
-	//TODO:: move everything (of .zip or .tar.gz) to storage folder
+
+	//test if the file list is present
+	if (!checkFilePath(syncFileListLoc, false)) {
+		outputText(' ', "**** Unable to open stored file list. Creating a new one (\"" + syncFileListLoc + "\")...", verbose, 3);
+		ofstream confFile(syncFileListLoc.c_str());
+		confFile.close();
+		if (!checkFilePath(syncFileListLoc, false)) {
+			outputText(' ', "**** ERROR:: Unable to create or open stored file list.", verbose, 3);
+			return -1;
+		}
+		else {
+			outputText(' ', "**** Created stored file list for \"" + dir + "\".", verbose, 3);
+		}
+	}
+	refreshFileList(thisStorageFolder, syncFileListLoc);
+
+	//test if the list to get is present
+	if (!checkFilePath(syncRetrieveListLoc, false)) {
+		outputText(' ', "**** Unable to open list of files to get. Creating a new one (\"" + syncRetrieveListLoc + "\")...", verbose, 3);
+		ofstream confFile(syncRetrieveListLoc.c_str());
+		confFile.close();
+		if (!checkFilePath(syncRetrieveListLoc, false)) {
+			outputText(' ', "**** ERROR:: Unable to create or open list of files to get.", verbose, 3);
+			return -1;
+		}
+		else {
+			outputText(' ', "**** Created list of files to get for \"" + dir + "\".", verbose, 3);
+		}
+	}
+	getListOfFilesToGet(syncRetrieveListLoc, &getList);
+
+	outputText(' ', "Searching \"" + dir + "\" for new files to store...", verbose, 3);
 	DIR *pDIR;
 	struct dirent *entry;
 	if( pDIR=opendir(dir.c_str()) ){
 		while(entry = readdir(pDIR)){
 			if( strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0 ){
 				string curFile = dir + foldSeparater + (string)entry->d_name;
-				if(checkFilePath(curFile, false) && checkFileType(curFile)){
-					outputText(' ', "Found: \"" + curFile + "\". Dealing with it..." , verbose, 3);
+				if(checkFilePath(curFile, false)
+					&& !(find(ignoreList.begin(), ignoreList.end(), curFile) != ignoreList.end())
+					&& !(find(getList.begin(), getList.end(), (string)entry->d_name) != getList.end())
+				){
+					outputText(' ', "Found: \"" + curFile + "\". Dealing with it..." , verbose, 4);
 					//wait until fully transferred
-					outputText(' ', "Waiting/Checking for full sync transfer...", verbose, 4);
+					outputText(' ', "Waiting/Checking for full sync transfer...", verbose, 5);
 					long initSize, tempSize;
 					do {
 						initSize = getFileSize(curFile);
@@ -281,25 +394,31 @@ int searchInnerSyncDir(string dir){
 					} while (initSize != tempSize);
 					outputText(' ', "Done." , verbose, 4);
 					//transfer to storage
-					outputText(' ', "Transferring to storage folder...", verbose, 4);
-					copyFile(curFile, storFolderLoc + foldSeparater + getLastPartOfPath(dir));
+					outputText(' ', "Transferring to storage folder...", verbose, 5);
+					copyFile(curFile, thisStorageFolder);
 					outputText(' ', "Done." , verbose, 4);
 					
 					//remove original file
-					outputText(' ', "Removing file from sync folder...", verbose, 4);
-						if(remove(curFile.c_str()) != 0){
-							outputText(' ', "***** Method returned nonzero." , verbose, 5);
-						}
-					outputText(' ', "Done." , verbose, 4);
+					outputText(' ', "Removing file from sync folder...", verbose, 5);
+					if(remove(curFile.c_str()) != 0){
+						outputText(' ', "***** Method returned nonzero." , verbose, 6);
+					}
+					outputText(' ', "Done." , verbose, 5);
 					
-					outputText(' ', "Done." , verbose, 3);
+					outputText(' ', "Done." , verbose, 4);
 				}
-				
-				//TODO:: copy fully transferred files over to the storage, then delete them from here.
 			}
 		}
 		closedir(pDIR);
 	}
+	outputText(' ', "Done.", verbose, 3);
+	//move files they want to retrieve to sync
+	outputText(' ', "Moving files in list to get...", verbose, 3);
+	moveFilesToGet(thisStorageFolder, dir, &getList);
+	outputText(' ', "Done.", verbose, 3);
+
+	//refresh list of files in storage
+	refreshFileList(thisStorageFolder, syncFileListLoc);
 	
 }//searchInnerSyncDir
 
@@ -313,7 +432,7 @@ void searchSyncDir(){
 				
 				string curSyncFolder = syncFolderLoc + foldSeparater + entry->d_name;
 				if(checkFilePath(curSyncFolder, true)){
-					outputText(' ', "Searching \"" + curSyncFolder + "\" for new files to store..." , verbose, 2);
+					outputText(' ', "Processing sync folder \"" + curSyncFolder + "\"..." , verbose, 2);
 					cropNumInStor(storFolderLoc + foldSeparater + entry->d_name, searchInnerSyncDir(curSyncFolder));
 				}
 			}
@@ -327,7 +446,7 @@ void searchSyncDir(){
 
 int runServer(){
 	bool okay = true;
-	outputText(' ', "######## START SERVER ########", verbose);
+	outputText(' ', nlc + nlc + nlc + nlc + nlc + "######## START SERVER ########", verbose);
 	
 	//test to see if sync and storage folders are present. create them if not.
 	if(!checkFilePath(syncFolderLoc, true)){
