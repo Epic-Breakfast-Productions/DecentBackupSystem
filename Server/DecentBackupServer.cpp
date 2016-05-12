@@ -254,10 +254,10 @@ long getFileSize(string file){
 void getItemsInDir(string dirLoc, vector<string>* itemList){
 	DIR *pDIR;
 	struct dirent *entry;
-	if (pDIR = opendir(storeDir.c_str())) {
+	if (pDIR = opendir(dirLoc.c_str())) {
 		while (entry = readdir(pDIR)) {
 			if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-				itemList->push_back(fileToGet);
+				itemList->push_back(entry->d_name);
 			}
 		}
 		closedir(pDIR);
@@ -269,7 +269,7 @@ void getItemsInDir(string dirLoc, vector<string>* fileList, vector<string>* dirL
 	vector<string> itemList;
 	getItemsInDir(dirLoc, &itemList);
 	
-	for (vector<string>::iterator it = itemList->begin(); it != toGetList->end(); ++it) {
+	for (vector<string>::iterator it = itemList.begin(); it != itemList.end(); ++it) {
 		if (checkFilePath(dirLoc + foldSeparater + *it, true)) {//is directory
 			if(wholePath){
 				dirList->push_back(dirLoc + foldSeparater + *it);
