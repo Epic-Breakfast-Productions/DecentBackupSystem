@@ -10,7 +10,7 @@
 //includes
 #include <iostream>//to do console stuff
 #include <fstream>//to do file stuff
-#include <time.h>//for time measurment
+#include <time.h>//for time measurement
 #include <string>//for strings
 #include <sys/stat.h>//for checking filepaths
 #include <stdlib.h>
@@ -18,9 +18,9 @@
 #include <stdio.h>
 #include <cstdlib>
 #include <string.h>
-#include<dirent.h>
+#include <dirent.h>
 #include <algorithm> //for checking file extentions
-#include<vector>
+#include <vector>
 
 #include <sstream>
 
@@ -93,7 +93,7 @@ void mySleep(int sleepS){
 }
 
 /**
-	Checks if the file path given is 
+	Checks if the file path given is present.
  */
 bool checkFilePath(string pathIn, bool dir){
     //sendDebugMsg("Path Given: " + pathIn);
@@ -125,7 +125,6 @@ bool checkFilePath(string pathIn, bool dir){
         sendDebugMsg("path given is valid");
     }
     */
-    
     return worked;
 }//checkFilePath(string)
 
@@ -252,8 +251,53 @@ long getFileSize(string file){
 	return filestatus.st_size;
 }
 
-void refreshFileList(string storeDir, string syncListLoc) {
-	ofstream fileListFile(syncListLoc.c_str());
+void getItemsInDir(string dirLoc, vector<string>* itemList){
+	DIR *pDIR;
+	struct dirent *entry;
+	if (pDIR = opendir(storeDir.c_str())) {
+		while (entry = readdir(pDIR)) {
+			if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+				itemList->push_back(fileToGet);
+			}
+		}
+		closedir(pDIR);
+	}
+	return;
+}
+
+void getItemsInDir(string dirLoc, vector<string>* fileList, vector<string>* dirList, bool wholePath = false){
+	vector<string> itemList;
+	getItemsInDir(dirLoc, &itemList);
+	
+	for (vector<string>::iterator it = itemList->begin(); it != toGetList->end(); ++it) {
+		if (checkFilePath(dirLoc + foldSeparater + *it, true)) {//is directory
+			if(wholePath){
+				dirList->push_back(dirLoc + foldSeparater + *it);
+			}else{
+				dirList->push_back(*it);
+			}
+		}else{
+			if(wholePath){
+				fileList->push_back(dirLoc + foldSeparater + *it);
+			}else{
+				fileList->push_back(*it);
+			}
+		}
+	}
+}
+
+bool dirIsEmpty(string dirLoc){
+	vector<string> itemList;
+	getItemsInDir(dirLoc, &itemList);
+	return itemList.size() == 0;
+}
+
+bool dirIsNotEmpty(string dirLoc){
+	return !dirIsEmpty(dirLoc);
+}
+
+void refreshFileList(ofstream& fileListFile, string storeDir, string pred) {//TODO:: work with sub folders
+	cout << "start refresh file list." << endl;
 	if (!fileListFile.good()) {
 		outputText(' ', "ERROR:: Unable to write to file list.", verbose, 3);
 		return;
@@ -263,14 +307,18 @@ void refreshFileList(string storeDir, string syncListLoc) {
 	if (pDIR = opendir(storeDir.c_str())) {
 		while (entry = readdir(pDIR)) {
 			if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-				//cout << entry->d_name << "\n";
-				fileListFile << entry->d_name << endl;
+				cout << entry->d_name << endl;
+				if (checkFilePath(entry->d_name, false)) {
+					cout << "\tis not dir" << endl;
+					fileListFile << pred << entry->d_name << endl;
+				}else {
+					cout << "\tis dir" << endl;
+					refreshFileList(fileListFile, storeDir + foldSeparater + entry->d_name, entry->d_name + foldSeparater);
+				}
 			}
-
 		}
 		closedir(pDIR);
 	}
-	fileListFile.close();
 	return;
 }
 
@@ -355,7 +403,10 @@ int searchInnerSyncDir(string dir){
 			outputText(' ', "**** Created stored file list for \"" + dir + "\".", verbose, 3);
 		}
 	}
-	refreshFileList(thisStorageFolder, syncFileListLoc);
+
+	ofstream fileListFile(syncFileListLoc.c_str());
+	refreshFileList(fileListFile, thisStorageFolder, "");
+	fileListFile.close();
 
 	//test if the list to get is present
 	if (!checkFilePath(syncRetrieveListLoc, false)) {
@@ -381,8 +432,7 @@ int searchInnerSyncDir(string dir){
 				string curFile = dir + foldSeparater + (string)entry->d_name;
 				if(checkFilePath(curFile, false)
 					&& !(find(ignoreList.begin(), ignoreList.end(), curFile) != ignoreList.end())
-					&& !(find(getList.begin(), getList.end(), (string)entry->d_name) != getList.end())
-				){
+					&& !(find(getList.begin(), getList.end(), (string)entry->d_name) != getList.end())){
 					outputText(' ', "Found: \"" + curFile + "\". Dealing with it..." , verbose, 4);
 					//wait until fully transferred
 					outputText(' ', "Waiting/Checking for full sync transfer...", verbose, 5);
@@ -418,7 +468,9 @@ int searchInnerSyncDir(string dir){
 	outputText(' ', "Done.", verbose, 3);
 
 	//refresh list of files in storage
-	refreshFileList(thisStorageFolder, syncFileListLoc);
+	ofstream fileListFileFinal(syncFileListLoc.c_str());
+	refreshFileList(fileListFileFinal, thisStorageFolder, "");
+	fileListFileFinal.close();
 	
 }//searchInnerSyncDir
 
