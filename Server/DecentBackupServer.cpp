@@ -1,8 +1,8 @@
  /*
 	Decent Backup System Server
-	
+
 	Copyright 2016 Epic Breakfast Productions
-		
+
 	Author: Greg Stewart
 */
 
@@ -128,7 +128,7 @@ bool checkFilePath(string pathIn, bool dir){
     //sendDebugMsg("Path Given: " + pathIn);
     bool worked = false;//if things worked
     struct stat pathStat;//buffer for the stat
-    //check if valid 
+    //check if valid
     if(worked = (lstat(pathIn.c_str(), &pathStat) == 0)){
         //sendDebugMsg("path is present");
         //check if a file or directory
@@ -168,38 +168,45 @@ string getTimestamp(){
 /**
 	How one should output text in this program.
 
-	@param type The type of output you want ('c'=console, 'l'=log file, ' '=both)
+	@param type The type of output you want ('c'=console, 'l'=log file, 'r'=returned)
 	@param message The message you are trying to output.
 	@param verbosity Param to output the message to console.
 */
-void outputText(char type, string message, bool verbosity){
-	if(type == 'c' || type == ' '){//console output
+string outputText(string types, string message, bool verbosity){
+	stringstream output;
+	output << getTimestamp() << " - " << message << endl;
+	string outputText = output.str();
+
+	if(types.find('c') != string::npos){//console output
 		if(verbosity){
-			cout << message << endl;
+			cout << outputText;
 		}
 	}
-	if(type == 'l' || type == ' '){
-		
+	if(types.find('l') != string::npos){
+
 		ofstream confFile (logFileLoc.c_str(), ios::app);
 		if(message != ""){
-			confFile << getTimestamp() << " - " << message << endl;
+			confFile << outputText;
 		}else{
 			confFile << endl;
 		}
-		
+
 		confFile.close();
+	}
+	if(types.find('r') != string::npos){
+		return outputText;
 	}
 }//outputText
 
 /**
 	A way to output with a way to determine the numer of tabs preceeding the message.
 
-	@param type The type of output you want ('c'=console, 'l'=log file, ' '=both)
+	@param type The type of output you want ('c'=console, 'l'=log file, 'r'=returned)
 	@param message The message you are trying to output.
 	@param verbosity Param to output the message to console.
 	@param tabLevel The number of tabs to put in front of the message.
 */
-void outputText(char type, string message, bool verbosity, int tabLevel){
+void outputText(string type, string message, bool verbosity, int tabLevel){
 	string tabs = "";
 	for(int i = 0; i < tabLevel; i++){
 		tabs += "\t";
@@ -213,7 +220,7 @@ void outputText(char type, string message, bool verbosity, int tabLevel){
 	@param directoryLocation The directory you wish to create.
 */
 void createDirectory(string directoryLocation){
-	string dir = "mkdir " + directoryLocation; 
+	string dir = "mkdir " + directoryLocation;
 	system(dir.c_str());
 }
 
@@ -361,7 +368,7 @@ Generates the folder config for a sync folder.
 void generateFolderConfig(string configLoc) {
 	ofstream confFile(configLoc.c_str());
 	if (!confFile.good()) {
-		outputText(' ', "ERROR:: Unable to create or open new sync config file.", verbose, 3);
+		outputText("cl", "ERROR:: Unable to create or open new sync config file.", verbose, 3);
 		return;
 	}
 	confFile << "numBackupsToKeep" << delimeter << "5";
@@ -422,7 +429,7 @@ void cropNumInStor(string storDir, int numToKeep) {
 void refreshFileList(ofstream& fileListFile, string storeDir, string levels = "") {
 	cout << "start refresh file list." << endl;
 	if (!fileListFile.good()) {
-		outputText(' ', "ERROR:: Unable to write to file list.", verbose, 3);
+		outputText("cl", "ERROR:: Unable to write to file list.", verbose, 3);
 		return;
 	}
 
@@ -456,7 +463,7 @@ void refreshFileList(string fileListLoc, string storeDir) {
 /**
 	Moves the files in the file list given to the sync folder.
 
-	@param 
+	@param
 */
 void getListOfFilesToGet(string syncRetrieveListLoc, vector<string>* toGetList) {
 	ifstream getListFile(syncRetrieveListLoc.c_str());
@@ -476,24 +483,24 @@ void getListOfFilesToGet(string syncRetrieveListLoc, vector<string>* toGetList) 
 
 void moveFilesToGet(string storageDir, string syncDir, vector<string>* toGetList) {
 	if (toGetList->size() == 0) {
-		outputText(' ', "No files to move.", verbose, 4);
+		outputText("cl", "No files to move.", verbose, 4);
 		return;
 	}
 	for (vector<string>::iterator it = toGetList->begin(); it != toGetList->end(); ++it) {
 		//cout << "Moving \"" + storageDir + foldSeparater + *it + "\"" << endl;
 		if (checkFilePath(syncDir + foldSeparater + *it, false)) {
-			outputText(' ', "\"" + storageDir + foldSeparater + *it + "\" already present in sync folder.", verbose, 4);
+			outputText("cl", "\"" + storageDir + foldSeparater + *it + "\" already present in sync folder.", verbose, 4);
 			continue;
 		}
 
-		outputText(' ', "Moving \"" + storageDir + foldSeparater + *it + "\"...", verbose, 4);
+		outputText("cl", "Moving \"" + storageDir + foldSeparater + *it + "\"...", verbose, 4);
 		if (checkFilePath(storageDir + foldSeparater + *it, false)) {
 			copyFile(storageDir + foldSeparater + *it, syncDir);
 		}
 		else {
-			outputText(' ', "Invalid file location. Copy cancelled.", verbose, 5);
+			outputText("cl", "Invalid file location. Copy cancelled.", verbose, 5);
 		}
-		outputText(' ', "Done.", verbose, 4);
+		outputText("cl", "Done.", verbose, 4);
 	}
 }
 
@@ -510,7 +517,7 @@ void moveFilesToGet(string storageDir, string syncDir, vector<string>* toGetList
 ///////////////
 
 bool setRunOnStart() {
-	outputText('c', "Setting to run the server on start.", verbose);
+	outputText("c", "Setting to run the server on start.", verbose);
 	//ofstream log (logFile.c_str(), ios::out | ios::app);
 	//TODO:: this
 }//setRunOnStart()
@@ -532,28 +539,28 @@ bool setRunOnStart() {
 */
 void runServer() {
 	bool okay = true;
-	outputText(' ', nlc + nlc + nlc + nlc + nlc + "######## START SERVER ########", verbose);
+	outputText("cl", nlc + nlc + nlc + nlc + nlc + "######## START SERVER ########", verbose);
 
 	//test to see if sync and storage folders are present. create them if not.
 	if (!checkFilePath(syncFolderLoc, true)) {
 		createDirectory(syncFolderLoc);
 		if (!checkFilePath(syncFolderLoc, true)) {
-			outputText(' ', "******** FAILED TO CREATE/ OPEN SYNC DIRECTORY. EXITING. ********", verbose, 1);
+			outputText("cl", "******** FAILED TO CREATE/ OPEN SYNC DIRECTORY. EXITING. ********", verbose, 1);
 			okay = false;
 		}
 		else {
-			outputText(' ', "Created Sync Directory.", verbose, 1);
+			outputText("cl", "Created Sync Directory.", verbose, 1);
 		}
 	}
 
 	if (!checkFilePath(storFolderLoc, true)) {
 		createDirectory(storFolderLoc);
 		if (!checkFilePath(storFolderLoc, true)) {
-			outputText(' ', "******** FAILED TO CREATE/ OPEN STORAGE DIRECTORY. EXITING. ********", verbose, 1);
+			outputText("cl", "******** FAILED TO CREATE/ OPEN STORAGE DIRECTORY. EXITING. ********", verbose, 1);
 			okay = false;
 		}
 		else {
-			outputText(' ', "Created Storage Directory.", verbose, 1);
+			outputText("cl", "Created Storage Directory.", verbose, 1);
 		}
 	}
 
@@ -563,31 +570,29 @@ void runServer() {
 	waitIntStr = convert.str();
 	if (okay) {
 		while (okay) {
-			outputText(' ', "Begin check loop.", verbose, 1);
-
-
+			outputText("cl", "Begin check loop.", verbose, 1);
 
 			searchSyncDir();
 
-			outputText(' ', "End Check Loop. Waiting " + waitIntStr + "s...", verbose, 1);
+			outputText("cl", "End Check Loop. Waiting " + waitIntStr + "s...", verbose, 1);
 			mySleep(checkInterval);
-			outputText(' ', "End Waiting.", verbose, 1);
-			outputText(' ', "", verbose);
+			outputText("cl", "End Waiting.", verbose, 1);
+			outputText("cl", "", verbose);
 		}
 	} else {
-		outputText(' ', "Something went wrong. Exiting execution of server.", verbose, 1);
+		outputText("cl", "Something went wrong. Exiting execution of server.", verbose, 1);
 	}
-	outputText(' ', "######## END SERVER RUN ########", verbose);
+	outputText("cl", "######## END SERVER RUN ########", verbose);
 }//runServer
 
 /**
 	Generates the default main configuration file at the current working directory of the executable (where it will look for it)
 */
 void generateMainConfig() {
-	outputText('c', "Generating Main Config File...", verbose);
+	outputText("c", "Generating Main Config File...", verbose);
 	ofstream confFile(confFileLoc.c_str(), ios::app);
 	if (!confFile.good()) {
-		outputText('c', "ERROR:: Unable to create or open config file.", true);
+		outputText("c", "ERROR:: Unable to create or open config file.", true);
 		return;
 	}
 	confFile << "logFileLoc" << delimeter << logFileLoc.c_str() << endl <<
@@ -597,7 +602,7 @@ void generateMainConfig() {
 		"storFolderLoc" << delimeter << storFolderLoc.c_str() << endl <<
 		"checkInterval" << delimeter << checkInterval;
 	confFile.close();
-	outputText('c', "Done.", verbose);
+	outputText("c", "Done.", verbose);
 	return;
 }//generateConfig()
 
@@ -686,28 +691,28 @@ int searchInnerSyncDir(string dir){
 
 	//test if config present, make it if its not
 	if(!checkFilePath(syncConfigLoc, false) ){
-		outputText(' ', "**** Unable to open sync config file. Creating a new one (\""+ syncConfigLoc +"\")...", verbose, 3);
+		outputText("cl", "**** Unable to open sync config file. Creating a new one (\""+ syncConfigLoc +"\")...", verbose, 3);
 		generateFolderConfig(syncConfigLoc);
 		if(!checkFilePath(syncConfigLoc, false) ){
-			outputText(' ', "**** ERROR:: Unable to create or open sync config file.", verbose, 3);
+			outputText("cl", "**** ERROR:: Unable to create or open sync config file.", verbose, 3);
 			return -1;
 		}else{
-			outputText(' ', "**** Created default sync config for \"" + dir + "\".", verbose, 3);
+			outputText("cl", "**** Created default sync config for \"" + dir + "\".", verbose, 3);
 		}
 	}
 	readFolderConfig(syncConfigLoc);
 
 	//test if the file list is present
 	if (!checkFilePath(syncFileListLoc, false)) {
-		outputText(' ', "**** Unable to open stored file list. Creating a new one (\"" + syncFileListLoc + "\")...", verbose, 3);
+		outputText("cl", "**** Unable to open stored file list. Creating a new one (\"" + syncFileListLoc + "\")...", verbose, 3);
 		ofstream confFile(syncFileListLoc.c_str());
 		confFile.close();
 		if (!checkFilePath(syncFileListLoc, false)) {
-			outputText(' ', "**** ERROR:: Unable to create or open stored file list.", verbose, 3);
+			outputText("cl", "**** ERROR:: Unable to create or open stored file list.", verbose, 3);
 			return -1;
 		}
 		else {
-			outputText(' ', "**** Created stored file list for \"" + dir + "\".", verbose, 3);
+			outputText("cl", "**** Created stored file list for \"" + dir + "\".", verbose, 3);
 		}
 	}
 
@@ -716,20 +721,20 @@ int searchInnerSyncDir(string dir){
 
 	//test if the list to get is present
 	if (!checkFilePath(syncRetrieveListLoc, false)) {
-		outputText(' ', "**** Unable to open list of files to get. Creating a new one (\"" + syncRetrieveListLoc + "\")...", verbose, 3);
+		outputText("cl", "**** Unable to open list of files to get. Creating a new one (\"" + syncRetrieveListLoc + "\")...", verbose, 3);
 		ofstream confFile(syncRetrieveListLoc.c_str());
 		confFile.close();
 		if (!checkFilePath(syncRetrieveListLoc, false)) {
-			outputText(' ', "**** ERROR:: Unable to create or open list of files to get.", verbose, 3);
+			outputText("cl", "**** ERROR:: Unable to create or open list of files to get.", verbose, 3);
 			return -1;
 		}
 		else {
-			outputText(' ', "**** Created list of files to get for \"" + dir + "\".", verbose, 3);
+			outputText("cl", "**** Created list of files to get for \"" + dir + "\".", verbose, 3);
 		}
 	}
 	getListOfFilesToGet(syncRetrieveListLoc, &getList);
 
-	outputText(' ', "Searching \"" + dir + "\" for new files to store...", verbose, 3);
+	outputText("cl", "Searching \"" + dir + "\" for new files to store...", verbose, 3);
 
 	DIR *pDIR;
 	struct dirent *entry;
@@ -740,44 +745,70 @@ int searchInnerSyncDir(string dir){
 				if(checkFilePath(curFile, false)
 					&& !(find(ignoreList.begin(), ignoreList.end(), curFile) != ignoreList.end())
 					&& !(find(getList.begin(), getList.end(), (string)entry->d_name) != getList.end())){
-					outputText(' ', "Found: \"" + curFile + "\". Dealing with it..." , verbose, 4);
+					outputText("cl", "Found: \"" + curFile + "\". Dealing with it..." , verbose, 4);
 					//wait until fully transferred
-					outputText(' ', "Waiting/Checking for full sync transfer...", verbose, 5);
+					outputText("cl", "Waiting/Checking for full sync transfer...", verbose, 5);
 					long initSize, tempSize;
 					do {
 						initSize = getFileSize(curFile);
 						mySleep(transferWait);
 						tempSize = getFileSize(curFile);
 					} while (initSize != tempSize);
-					outputText(' ', "Done." , verbose, 4);
+					outputText("cl", "Done." , verbose, 4);
 					//transfer to storage
-					outputText(' ', "Transferring to storage folder...", verbose, 5);
+					outputText("cl", "Transferring to storage folder...", verbose, 5);
 					copyFile(curFile, thisStorageFolder);
-					outputText(' ', "Done." , verbose, 4);
-					
+					outputText("cl", "Done." , verbose, 4);
+
 					//remove original file
-					outputText(' ', "Removing file from sync folder...", verbose, 5);
+					outputText("cl", "Removing file from sync folder...", verbose, 5);
 					if(remove(curFile.c_str()) != 0){
-						outputText(' ', "***** Method returned nonzero." , verbose, 6);
+						outputText("cl", "***** Method returned nonzero." , verbose, 6);
 					}
-					outputText(' ', "Done." , verbose, 5);
-					
-					outputText(' ', "Done." , verbose, 4);
+					outputText("cl", "Done." , verbose, 5);
+
+					outputText("cl", "Done." , verbose, 4);
 				}
 			}
 		}
 		closedir(pDIR);
 	}
-	outputText(' ', "Done.", verbose, 3);
+	outputText("cl", "Done.", verbose, 3);
 	//move files they want to retrieve to sync
-	outputText(' ', "Moving files in list to get...", verbose, 3);
+	outputText("cl", "Moving files in list to get...", verbose, 3);
 	moveFilesToGet(thisStorageFolder, dir, &getList);
-	outputText(' ', "Done.", verbose, 3);
+	outputText("cl", "Done.", verbose, 3);
 
 	//refresh list of files in storage
 	refreshFileList(syncFileListLoc, thisStorageFolder);
-	
+
 }//searchInnerSyncDir
+
+
+string processSyncDir(string syncDirLoc, string storeDirLoc, string configFileName = clientConfigFileName, string syncFileListName = clientSyncGetFileList, string getListFileName = clientSyncFileListName){
+	#ifdef __linux__
+	const string thisFoldSeparater = "/";
+	const string thisnlc = "\n";
+	#endif
+	#ifdef _WIN32
+	const string thisFoldSeparater = "\\";
+	const string thisnlc = "\r\n";
+	#endif
+	//folder locations
+	string syncConfigLoc = syncDirLoc + thisFoldSeparater + clientConfigFileName;
+	string syncFileListLoc = syncDirLoc + thisFoldSeparater + clientSyncFileListName;
+	string syncRetrieveListLoc = syncDirLoc + thisFoldSeparater + clientSyncGetFileList;
+	//string thisStorageFolder = storFolderLoc + foldSeparater + getLastPartOfPath(dir);
+
+	vector<string> getList;
+	vector<string> ignoreList;
+	ignoreList.push_back(syncConfigLoc);
+	ignoreList.push_back(syncFileListLoc);
+	ignoreList.push_back(syncRetrieveListLoc);
+
+	numBackupsToKeep = numBackupsToKeepDef;
+
+}
 
 void searchSyncDir(){
 	vector<string> fileList;
@@ -787,12 +818,15 @@ void searchSyncDir(){
 
 	for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
 		string curSyncFolder = syncFolderLoc + foldSeparater + *it;
+		string curStorFolder = storFolderLoc + foldSeparater + *it;
 		if (checkFilePath(curSyncFolder, true)) {
-			outputText(' ', "Processing sync folder \"" + curSyncFolder + "\"...", verbose, 2);
-			cropNumInStor(curSyncFolder, searchInnerSyncDir(curSyncFolder));
+			outputText("cl", "Processing sync folder \"" + curSyncFolder + "\"...", verbose, 2);
+			//TODO:: do this with thread pooling
+			outputText("cl", processSyncDir(curSyncFolder, curStorFolder), verbose, 2);
+			//cropNumInStor(curSyncFolder, searchInnerSyncDir(curSyncFolder));
 		}
 	}
-	outputText(' ', "Done." , verbose, 2);
+	outputText("cl", "Done." , verbose, 2);
 }//searchSyncDir
 
 
@@ -807,7 +841,7 @@ int main(int argc, char *argv[]){
 			"List commands: -h" << endl;
 		return 1;
 	}
-	
+
 	/*
 		Check for options (set flags)
 	*/
@@ -831,7 +865,7 @@ int main(int argc, char *argv[]){
 			//cout << "Changing config location." << endl;//debugging
 			curArg++;
 			confFileLoc = string(argv[curArg]);
-			outputText('c', "Config file changed to: \"" + confFileLoc + "\"", true);
+			outputText("c", "Config file set to: \"" + confFileLoc + "\"", true);
 		}else if(string(argv[curArg]) == "-s"){
 			setToStartOnStart = true;
 		}else{//debugging
@@ -841,9 +875,9 @@ int main(int argc, char *argv[]){
 	}
 	//cout << "Done." << endl;
 	~curArg;
-	
+
 	if(helpFlag){
-		cout << endl << 
+		cout << endl <<
 			"Decent Backup System Server" << endl <<
 			"\tCopyright 2016 Epic Breakfast Productions" << endl <<
 			"\tVersion: " << version << endl << endl <<
@@ -856,21 +890,21 @@ int main(int argc, char *argv[]){
 			"\t-c <loc>  Specify location of config file." << endl << endl;
 		return 0;
 	}
-	
+
 	/**
 		Read config file for configuration stuff, creating it as necessary.
 	*/
 	if(!checkFilePath(confFileLoc, false) ){
-		outputText('c', "Unable to open config file. Creating a new one...", verbose);
+		outputText("c", "Unable to open config file. Creating a new one...", verbose);
 		generateMainConfig();
 		if(!checkFilePath(confFileLoc, false) ){
-			outputText('c', "ERROR:: Unable to create or open config file.", true);
+			outputText("c", "ERROR:: Unable to create or open config file.", true);
 			return 1;
 		}
 	}
-	
+
 	readMainConfig();
-	
+
 	if(listFlag){
 		cout << "Files and folders:" << endl <<
 			"\tConfig File:       " << confFileLoc << endl <<
@@ -878,19 +912,19 @@ int main(int argc, char *argv[]){
 			"\tSync Directory:    " << syncFolderLoc << endl <<
 			"\tStorage Directory: " << storFolderLoc << endl;
 	}
-	
+
 	if(setToStartOnStart){
 		setRunOnStart();
 	}
-	
+
 	if(runFlag){
 		runServer();
 	}
-	
+
 	if(!helpFlag && !runFlag && !listFlag && !setToStartOnStart){
-		outputText('c', "Not told to do anything. Use -h to see options.", verbose);
+		outputText("c", "Not told to do anything. Use -h to see options.", verbose);
 	}
-	
-	
+
+
 	return 0;
 }//main
