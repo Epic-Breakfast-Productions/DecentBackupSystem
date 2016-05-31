@@ -10,22 +10,23 @@
 #pragma region include_globals
 ///////////////
 
-//includes
-#include <iostream>//to do console stuff
-#include <fstream>//to do file stuff
-#include <time.h>//for time measurement
-#include <string>//for strings
-#include <sys/stat.h>//for checking filepaths
+//includes TODO:: check for redundant includes
+#include <cstdlib>
 #include <stdlib.h>
 
-#include <stdio.h>
-#include <cstdlib>
-#include <string.h>
-#include <dirent.h>
-#include <algorithm> //for checking file extentions
-#include <vector>
+#include <iostream>//to do console stuff
+#include <fstream>//to do file stuff
+#include <stdio.h>//file stuff?
+#include <sstream>//for string stream on the outputs
 
-#include <sstream>
+#include <time.h>//for time measurement
+#include <string>//for strings
+#include <string.h>//for strings
+#include <sys/stat.h>//for checking filepaths
+#include <vector>//for lists of things
+#include <dirent.h>//for looking at contents of directory
+
+//#include <algorithm> //for checking file extentions
 
 //sleep stuff/ other sys dependent stuff
 #ifdef __linux__
@@ -166,40 +167,6 @@ string getTimestamp(){
 }//getTimestamp
 
 /**
-	How one should output text in this program.
-
-	@param type The type of output you want ('c'=console, 'l'=log file, 'r'=returned)
-	@param message The message you are trying to output.
-	@param verbosity Param to output the message to console.
-*/
-string outputText(string types, string message, bool verbosity){
-	stringstream output;
-	output << getTimestamp() << " - " << message << endl;
-	string outputText = output.str();
-
-	if(types.find('c') != string::npos){//console output
-		if(verbosity){
-			cout << outputText;
-		}
-	}
-	if(types.find('l') != string::npos){
-
-		ofstream confFile (logFileLoc.c_str(), ios::app);
-		if(message != ""){
-			confFile << outputText;
-		}else{
-			confFile << endl;
-		}
-
-		confFile.close();
-	}
-	if(types.find('r') != string::npos){
-		return outputText;
-	}
-	return NULL;
-}//outputText
-
-/**
 	Gets a certain number of tabs.
 	@param numTabs The number of tabs you want (defaults to 0).
 */
@@ -212,16 +179,34 @@ string getTabs(int numTabs = 1) {
 }
 
 /**
-	A way to output with a way to determine the numer of tabs preceeding the message.
+	How one should output text in this program.
 
-	@param type The type of output you want ('c'=console, 'l'=log file, 'r'=returned).
+	@param types The type(s) of output you want ('c'=console, 'l'=log file, 'r'=returned)
 	@param message The message you are trying to output.
-	@param verbosity Param to output the message to console.
-	@param tabLevel The number of tabs to put in front of the message.
+	@param verbosity Param to allow output the message to console.
 */
-string outputText(string type, string message, bool verbosity, int tabLevel){
-	return outputText(type, getTabs(tabLevel) + message, verbosity);
-}
+string outputText(string types, string message, bool verbosity = true, int tabLevel = 0){
+	stringstream output;
+	output << getTimestamp() << " - " << getTabs(tabLevel) << message << endl;
+	string outputText = output.str();
+
+	if(types.find('c') != string::npos && verbosity){//console output
+		cout << outputText;
+	}
+	if(types.find('l') != string::npos){
+		ofstream confFile (logFileLoc.c_str(), ios::app);
+		if(message != ""){
+			confFile << outputText;
+		}else{
+			confFile << endl;
+		}
+		confFile.close();
+	}
+	if(types.find('r') != string::npos){
+		return outputText;
+	}
+	return NULL;
+}//outputText
 
 /**
 	Creates a directory.
@@ -245,6 +230,8 @@ string getLastPartOfPath(string path) {
 /**
 	Copies a file from a path into the given directory. Creates the destination directory if it is not present.
 
+	TODO:: find out if this removes the file.
+
 	@param fromPath The path of the file to move.
 	@param toDir The directory to move the file into.
 */
@@ -252,13 +239,16 @@ void copyFile(string fromPath, string toDir) {
 	if (!checkFilePath(toDir, true)) {
 		createDirectory(toDir);
 	}
-
+	//create destination location
 	string toPath = toDir + foldSeparater + getLastPartOfPath(fromPath);
-
+	//open file streams
 	ifstream  src(fromPath.c_str(), ios::binary);
 	ofstream  dst(toPath.c_str(), ios::binary);
-
+	//move data
 	dst << src.rdbuf();
+	//close the files
+	src.close();
+	dst.close();
 }
 
 /**
@@ -321,15 +311,13 @@ void getItemsInDir(string dirLoc, vector<string>* fileList, vector<string>* dirL
 		if (checkFilePath(dirLoc + foldSeparater + *it, true)) {//is directory
 			if (wholePath) {
 				dirList->push_back(dirLoc + foldSeparater + *it);
-			}
-			else {
+			} else {
 				dirList->push_back(*it);
 			}
 		} else {
 			if (wholePath) {
 				fileList->push_back(dirLoc + foldSeparater + *it);
-			}
-			else {
+			} else {
 				fileList->push_back(*it);
 			}
 		}
@@ -435,12 +423,12 @@ void cropNumInStor(string storDir, int numToKeep) {
 	@param storeDir The storage directory to get the list of files in.
 	@param levels The levels to prepend to the entries into the fileList. (optional)
  */
-void refreshFileList(ofstream& fileListFile, string storeDir, string levels = "") {
+string refreshFileList(ofstream& fileListFile, string storeDir, string levels = "", int tabLevel = 2) {
+	string output = outputText("r", "Refreshing file list...", false, tabLevel);
 	//TODO:: make threadsafe
-	cout << "start refresh file list." << endl;
 	if (!fileListFile.good()) {
-		outputText("cl", "ERROR:: Unable to write to file list.", verbose, 3);
-		return;
+		output += outputText("cl", "ERROR:: Unable to write to file list.", verbose, tablevel + 1);
+		return output + outputText("r", "Done.", false, tablevel);
 	}
 
 	vector<string> dirList;
@@ -454,7 +442,7 @@ void refreshFileList(ofstream& fileListFile, string storeDir, string levels = ""
 	for (vector<string>::iterator it = fileList.begin(); it != fileList.end(); ++it) {
 		fileListFile << levels << *it << endl;
 	}
-	return;
+	return output + outputText("r", "Done.", false, tablevel);
 }
 
 /**
@@ -514,12 +502,12 @@ void moveFilesToGet(string storageDir, string syncDir, vector<string>* toGetList
 		else {
 			outputText("cl", "Invalid file location. Copy cancelled.", verbose, 5);
 		}
-		outputText("cl", "Done.", verbose, 4);
 	}
+	outputText("cl", "Done.", verbose, 4);
 }
 
 string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 1, bool verbosity = verbose, string configFileName = clientConfigFileName, string syncFileListName = clientSyncGetFileList, string getListFileName = clientSyncFileListName, int thisNumBackupsToKeep = numBackupsToKeepDef, string thisFoldSeparater = foldSeparater, string thisnlc = nlc) {
-	
+
 	string output = "";
 
 	//config and other list locations
@@ -546,7 +534,7 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 1, b
 	//ensure storage folder present
 
 	//for each file in sync folder (not in getList or ignore list), move it into the storage folder, removing it from the sync folder
-	
+
 
 	//if not already moved to sync, move files in retrieveList to sync. remove them from storage
 	output += moveFilesToGet(storeDirLoc, syncDirLoc, &getList);
