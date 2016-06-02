@@ -218,6 +218,10 @@ void createDirectory(string directoryLocation){
 	system(dir.c_str());
 }
 
+void removeDirectory(string dirLocation) {
+	RemoveDirectory(dirLocation.c_str());
+}
+
 /**
 	Gets the last file or folder in a given file path.
 
@@ -262,6 +266,7 @@ long getFileSize(string file) {
 	stat(file.c_str(), &filestatus);
 	return filestatus.st_size;
 }
+
 /////////////////
 #pragma endregion workers
 /////////////////
@@ -361,45 +366,85 @@ bool dirIsNotEmpty(string dirLoc) {
 Generates the folder config for a sync folder.
 
 @param configLoc The location of the config file to create.
+@param tabLevel The number of tabs put in front of output lines.
 */
-void generateFolderConfig(string configLoc) {
+string generateFolderConfig(string configLoc, int tabLevel = 2) {
+	string output = outputText("r", "Generating folder configuration...", false, tabLevel);
 	ofstream confFile(configLoc.c_str());
 	if (!confFile.good()) {
-		outputText("cl", "ERROR:: Unable to create or open new sync config file.", verbose, 3);
-		return;
+		output += outputText("r", "ERROR:: Unable to create or open new sync config file.", false, tabLevel + 1);
+		return output + outputText("r", "Done ---WITH ERRORS---", verbose, tabLevel);
 	}
+	//add items to configuration file
 	confFile << "numBackupsToKeep" << delimeter << "5";
 	confFile.close();
-	return;
+	return output + outputText("r", "Done.", false, tabLevel);;
 }
 
 /**
 Ensures the sync folder's config is present. Creates it if it is not there.
 
 @param configLoc The location of the config file to create.
+@param tabLevel The number of tabs put in front of output lines.
 */
-void ensureFolderConfig(string configLoc) {
-	//TODO:: this
+string ensureFolderConfig(string configLoc, int tabLevel = 1) {
+	string output = outputText("r", "Ensuring folder config is present...", false, tabLevel);
+	if(!checkFilePath(dirLoc + foldSeparater + *it, true)){
+		output += outputText("r", "Folder config not found.", false, tabLevel + 1);
+		output += generateFolderConfig(configLoc, tabLevel + 1);
+	} else {
+		output += outputText("r", "Folder config is present!", false, tabLevel + 1);
+	}
+	return output + outputText("r", "Done.", false, tabLevel);
 }
 
 /**
 Reads the folder config into the globals.
 
-@param configLoc The location of the config file to create.
+@param configLoc The location of the config file to read from.
+@param backupsToKeep The pointer to the integer to keep track of the number of backups to keep.
+@param thisDelimeter The delimeter to go between the key/value pairs in the config file.
+@param tabLevel The number of tabs put in front of output lines.
 */
-void readFolderConfig(string configLoc) {
+string readFolderConfig(string configLoc, int* backupsToKeep, string thisDelimeter = delimeter, int tabLevel = 1) {
+	string output = outputText("r", "Reading configuration file...", false, tabLevel);
+
 	ifstream confFile(configLoc.c_str()); // declare file stream: http://www.cplusplus.com/reference/iostream/ifstream/
 	string variable, value;
 
 	while (confFile.good()) {
-		getline(confFile, variable, delimeter);
+		getline(confFile, variable, thisDelimeter);
 		getline(confFile, value, '\n');
 		//cout << "\"" << variable << "\", \"" << value << "\"" << endl;
 		if (variable == "numBackupsToKeep") {
-			numBackupsToKeep = atoi(value.c_str());
+			output += outputText("r", "Got # of backups to keep: " + value, false, tabLevel + 1);
+			*backupsToKeep = atoi(value.c_str());
 		}
 	}
 	confFile.close();
+	return output + outputText("r", "Done.", false, tabLevel);
+}
+
+/**
+	Ensures that the storage directory is present.
+
+	@param storageDirLoc The location the storage directory should be.
+	@param tabLevel The number of tabs put in front of output lines.
+*/
+string ensureStorageDir(string storageDirLoc, int tabLevel = 1) {
+	string output = "";
+	
+	if (!checkFilePath(storageDirLoc, true)) {
+		output += outputText("r", "Storage folder not found. Creating...", false, tabLevel);
+		createDirectory(storageDirLoc);
+		if (!checkFilePath(storageDirLoc, true)) {
+			output += outputText("r", "ERROR:: FAILED TO CREATE STORAGE DIRECTORY", tabLevel +1);
+			output += outputText("r", "Done ---WITH ERROR---", tabLevel);
+		} else {
+			output += outputText("r", "Done.", tabLevel);
+		}
+	}
+	return output;
 }
 
 /**
@@ -407,13 +452,15 @@ Crops the number of files in storage to the number set by the config.
 
 @param storDir The storage directory in question.
 @param numToKeep The number of files to keep.
+@param tabLevel The number of tabs put in front of output lines.
 */
-void cropNumInStor(string storDir, int numToKeep) {
+string cropNumInStor(string storDir, int numToKeep, int tabLevel = 1) {
 	if (numToKeep == -1) {
-		return;
+		return "";
 	}
-	//ensure directory is there
-	//TODO:: this
+	string output = outputText("r", "Cropping number of files in the storage folder...", false, tabLevel);
+
+	//TODO:: go through each folder, cropping the number of files in each to the number given
 }
 
 /**
@@ -422,13 +469,14 @@ void cropNumInStor(string storDir, int numToKeep) {
 	@param fileListFile Pointer to the file stream that lists the files.
 	@param storeDir The storage directory to get the list of files in.
 	@param levels The levels to prepend to the entries into the fileList. (optional)
+	@param tabLevel The number of tabs put in front of output lines. (optional)
  */
-string refreshFileList(ofstream& fileListFile, string storeDir, string levels = "", int tabLevel = 2) {
-	string output = outputText("r", "Refreshing file list...", false, tabLevel);
-	//TODO:: make threadsafe
+string refreshFileList(ofstream& fileListFile, string storeDir, string levels = "", int tabLevel = 1) {
+	string output = outputText("r", "Getting files in \"" + storeDir +"\"...", false, tabLevel);
+
 	if (!fileListFile.good()) {
-		output += outputText("cl", "ERROR:: Unable to write to file list.", verbose, tablevel + 1);
-		return output + outputText("r", "Done.", false, tablevel);
+		output += outputText("cl", "ERROR:: Unable to write to file list.", verbose, tabLevel + 1);
+		return output + outputText("r", "Done ---WITH ERRORS---.", false, tabLevel);
 	}
 
 	vector<string> dirList;
@@ -436,13 +484,13 @@ string refreshFileList(ofstream& fileListFile, string storeDir, string levels = 
 	getItemsInDir(storeDir, &fileList, &dirList);
 
 	for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
-		refreshFileList(fileListFile, storeDir + foldSeparater + *it, levels + *it + foldSeparater);
+		output += refreshFileList(fileListFile, storeDir + foldSeparater + *it, levels + *it + foldSeparater, tabLevel + 1);
 	}
 
 	for (vector<string>::iterator it = fileList.begin(); it != fileList.end(); ++it) {
 		fileListFile << levels << *it << endl;
 	}
-	return output + outputText("r", "Done.", false, tablevel);
+	return output + outputText("r", "Done.", false, tabLevel);
 }
 
 /**
@@ -450,21 +498,27 @@ string refreshFileList(ofstream& fileListFile, string storeDir, string levels = 
 
 	@param fileListLoc The location of the file list file.
 	@param storeDir The location of the storage directory.
+	@param tabLevel The number of tabs put in front of output lines.
  */
-void refreshFileList(string fileListLoc, string storeDir) {
-	//TODO:: make threadsafe
+string refreshFileList(string fileListLoc, string storeDir, int tabLevel = 1) {
+	string output = outputText("r", "Refreshing file list...", false, tabLevel);
+
 	ofstream fileListFile(fileListLoc.c_str());
-	refreshFileList(fileListFile, storeDir);
+	output += refreshFileList(fileListFile, storeDir, "", tabLevel + 1);
 	fileListFile.close();
+	return output + outputText("r", "Done.", false, tabLevel);
 }
 
 
 /**
-	Moves the files in the file list given to the sync folder.
+	Gets a list of files to retrieve and put into the sync folder, and clear the get list as it goes.
 
-	@param
+	@param syncRetrieveListLoc The location of the list of files to get.
+	@param toGetList The pointer to the vector of the files to get.
+	@param tabLevel The number of tabs put in front of output lines.
 */
-void getListOfFilesToGet(string syncRetrieveListLoc, vector<string>* toGetList) {
+string getListOfFilesToGet(string syncRetrieveListLoc, vector<string>* toGetList, int tabLevel = 1) {
+	string output = outputText("r", "Refreshing file list...", false, tabLevel);
 	ifstream getListFile(syncRetrieveListLoc.c_str());
 	string fileToGet;
 
@@ -478,63 +532,128 @@ void getListOfFilesToGet(string syncRetrieveListLoc, vector<string>* toGetList) 
 		}
 	}
 	getListFile.close();
+	return output + outputText("r", "Done.", false, tabLevel);
 }
 
+/**
+	Moves the contents of a sync folder into a storage folder.
 
-void moveFilesToGet(string storageDir, string syncDir, vector<string>* toGetList) {
-	//TODO:: make this threadsafe
+	@param syncFolderLoc The location of the sync folder to move things from.
+	@param storFolderLoc The location of the storage folder to move things to.
+	@param ignoreList The pointer of the list of files to ignore.
+	@param levels The levels to prepend to outputs. (keep as empty string for first call)
+	@param tabLevel The number of tabs put in front of output lines.
+*/
+string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector<string>* ignoreList, string levels = "", int tabLevel = 1) {
+	string output = outputText("r", "Moving files and folders in \"" + syncFolderLoc + "\" to \"" + storFolderLoc + "\"...", false, tabLevel);
+	//ensure storage folder location
+	ensureStorageDir(storFolderLoc, tabLevel + 1);
+
+	//get directory and file list
+	vector<string> dirList;
+	vector<string> fileList;
+	getItemsInDir(storeDir, &fileList, &dirList);
+
+	//process directories recursively
+	for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
+		output += moveSyncFolderContents(syncFolderLoc + foldSeparater + *it, storFolderLoc + foldSeparater + *it, ignoreList, levels + foldSeparater + *it, tabLevel + 1);
+	}
+
+	//process files
+	output += outputText("r", "Transferring files....", false, tabLevel + 1);
+	for (vector<string>::iterator it = fileList.begin(); it != fileList.end(); ++it) {
+		if (find(ignoreList->begin(), ignoreList->end(), syncFolderLoc + foldSeparater + *it) != ignoreList->end()) {
+			output += outputText("r", "Skipping (in ignore or get list) \"" + levels + foldSeparater + *it + "\".", false, tabLevel + 2);
+		} else {
+			//move file
+			output += outputText("r", "Moving \"" + levels + foldSeparater + *it + "\"...", false, tabLevel + 2);
+			copyFile(syncFolderLoc + foldSeparater + *it, storFolderLoc);
+			output += outputText("r", "Done.", false, tabLevel + 2);
+			//remove file
+			remove(syncFolderLoc + foldSeparater + *it);
+		}
+	}
+
+	//remove sync folder for this iteration
+	if (dirIsEmpty(syncFolderLoc)) {
+		removeDirectory(syncFolderLoc);
+	}
+
+	return output + outputText("r", "Done.", false, tabLevel);
+}
+
+/**
+	Moves the files to get from the storage directory into the sync folder.
+*/
+string moveFilesToGet(string storageDir, string syncDir, vector<string>* toGetList, int tabLevel = 1) {
+	string output = outputText("r", "Moving files to get...", false, tabLevel);
 
 	if (toGetList->size() == 0) {
-		outputText("cl", "No files to move.", verbose, 4);
-		return;
+		return output + outputText("r", "No files to move.", false, tabLevel + 1);
 	}
 	for (vector<string>::iterator it = toGetList->begin(); it != toGetList->end(); ++it) {
-		//cout << "Moving \"" + storageDir + foldSeparater + *it + "\"" << endl;
 		if (checkFilePath(syncDir + foldSeparater + *it, false)) {
-			outputText("cl", "\"" + storageDir + foldSeparater + *it + "\" already present in sync folder.", verbose, 4);
+			output += outputText("r", "\"" + storageDir + foldSeparater + *it + "\" already present in sync folder.", false, tabLevel + 1);
 			continue;
 		}
 
-		outputText("cl", "Moving \"" + storageDir + foldSeparater + *it + "\"...", verbose, 4);
+		output += outputText("r", "Moving \"" + storageDir + foldSeparater + *it + "\"...", false, tabLevel + 1);
 		if (checkFilePath(storageDir + foldSeparater + *it, false)) {
 			copyFile(storageDir + foldSeparater + *it, syncDir);
-		}
-		else {
-			outputText("cl", "Invalid file location. Copy cancelled.", verbose, 5);
+		} else {
+			outputText("cl", "Invalid file location. Copy cancelled.", false, tabLevel + 2);
 		}
 	}
-	outputText("cl", "Done.", verbose, 4);
+	return output + outputText("r", "Done.", false, tabLevel);
 }
 
-string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 1, bool verbosity = verbose, string configFileName = clientConfigFileName, string syncFileListName = clientSyncGetFileList, string getListFileName = clientSyncFileListName, int thisNumBackupsToKeep = numBackupsToKeepDef, string thisFoldSeparater = foldSeparater, string thisnlc = nlc) {
+string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, bool verbosity = verbose, string configFileName = clientConfigFileName, string syncFileListName = clientSyncGetFileList, string getListFileName = clientSyncFileListName, int thisNumBackupsToKeep = numBackupsToKeepDef, string thisFoldSeparater = foldSeparater, string thisnlc = nlc) {
+	string output = outputText("r", "Processing folder:\"" + syncDirLoc + "\"...", false, tabLevel);
+	output += outputText("r", "Storage directory: \"" + storeDirLoc + "\"", false, tabLevel + 1);
 
-	string output = "";
+	//config values
+	int numToKeep = thisNumBackupsToKeep;
+
 
 	//config and other list locations
 	string syncConfigLoc = syncDirLoc + thisFoldSeparater + configFileName;
 	string syncFileListLoc = syncDirLoc + thisFoldSeparater + syncFileListName;
 	string syncRetrieveListLoc = syncDirLoc + thisFoldSeparater + getListFileName;
 
+	//lists of files
 	vector<string> getList;
 	vector<string> ignoreList;
+	//add the defaults to ignore list.
 	ignoreList.push_back(syncConfigLoc);
 	ignoreList.push_back(syncFileListLoc);
 	ignoreList.push_back(syncRetrieveListLoc);
 
 	//process config folder
-	ensureFolderConfig(syncConfigLoc);
-	//TODO: finish this step
-
+	output += ensureFolderConfig(syncConfigLoc);
+	output += readFolderConfig(syncConfigLoc, &numToKeep, delimeter, tabLevel + 1);
 
 	//get list from getList file
 	output += getListOfFilesToGet(syncRetrieveListLoc, &getList);
+	output += outputText("r", "Getting the following files back:", false, tabLevel + 1);
+	for (vector<string>::iterator it = getList->begin(); it != getList->end(); ++it) {
+		output += outputText("r", *it, false, tabLevel + 1);
+	}
+	output += outputText("r", "End List.", false, tabLevel + 1);
 
 	//add items in get list to ignore list
+	ignoreList.insert(ignoreList.end(), getList.begin(), getList.end());
 
 	//ensure storage folder present
+	output += ensureStorageDir(storeDirLoc, tabLevel + 1);
 
-	//for each file in sync folder (not in getList or ignore list), move it into the storage folder, removing it from the sync folder
+	//check if any errors have happened so far, exit if any did.
+	if (output.find("ERROR::") != string::npos) {
+		output += outputText("r", "ERROR:: Errors in run. View log to see what happened (search \"ERROR::\")", false, tabLevel + 1);
+		return output + outputText("r", "Completed processing sync directory: " + syncDirLoc, verbosity, tabLevel);
+	}
 
+	//for each file in sync folder (not in ignore list), move it into the storage folder, removing it from the sync folder
+	output += moveSyncFolderContents(syncDirLoc, storeDirLoc, tabLevel + 1);
 
 	//if not already moved to sync, move files in retrieveList to sync. remove them from storage
 	output += moveFilesToGet(storeDirLoc, syncDirLoc, &getList);
@@ -545,7 +664,7 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 1, b
 	//refresh storage file list
 	output += refreshFileList(syncFileListLoc, storeDirLoc);
 
-	return output + outputText("r", "Completed processing sync directory: " + syncDirLoc, verbosity, tablevel);
+	return output + outputText("r", "Completed processing sync directory: " + syncDirLoc, verbosity, tabLevel);
 }
 
 /**
