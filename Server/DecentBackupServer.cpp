@@ -20,6 +20,7 @@
 #include <sstream>//for string stream on the outputs
 
 #include <time.h>//for time measurement
+#include <algorithm>//for finding element in vector
 #include <string>//for strings
 #include <string.h>//for strings
 #include <sys/stat.h>//for checking filepaths
@@ -30,7 +31,7 @@
 
 //sleep stuff/ other sys dependent stuff
 #ifdef __linux__
-#include <unistd.h>
+#include <unistd.h>//sleep, rm dir
 #endif
 #ifdef _WIN32
 #include <windows.h>
@@ -219,7 +220,12 @@ void createDirectory(string directoryLocation){
 }
 
 void removeDirectory(string dirLocation) {
+#ifdef __linux__
+	rmdir(dirLocation.c_str());
+#endif
+#ifdef _WIN32
 	RemoveDirectory(dirLocation.c_str());
+#endif
 }
 
 /**
@@ -245,6 +251,9 @@ void copyFile(string fromPath, string toDir) {
 	}
 	//create destination location
 	string toPath = toDir + foldSeparater + getLastPartOfPath(fromPath);
+
+	//TODO:: check if file already present where copying; remove it if there.
+
 	//open file streams
 	ifstream  src(fromPath.c_str(), ios::binary);
 	ofstream  dst(toPath.c_str(), ios::binary);
@@ -389,7 +398,7 @@ Ensures the sync folder's config is present. Creates it if it is not there.
 */
 string ensureFolderConfig(string configLoc, int tabLevel = 1) {
 	string output = outputText("r", "Ensuring folder config is present...", false, tabLevel);
-	if(!checkFilePath(dirLoc + foldSeparater + *it, true)){
+	if(!checkFilePath(configLoc, false)){
 		output += outputText("r", "Folder config not found.", false, tabLevel + 1);
 		output += generateFolderConfig(configLoc, tabLevel + 1);
 	} else {
@@ -406,14 +415,14 @@ Reads the folder config into the globals.
 @param thisDelimeter The delimeter to go between the key/value pairs in the config file.
 @param tabLevel The number of tabs put in front of output lines.
 */
-string readFolderConfig(string configLoc, int* backupsToKeep, string thisDelimeter = delimeter, int tabLevel = 1) {
+string readFolderConfig(string configLoc, int* backupsToKeep, string thisDelimeter = delimeter + "", int tabLevel = 1) {
 	string output = outputText("r", "Reading configuration file...", false, tabLevel);
 
 	ifstream confFile(configLoc.c_str()); // declare file stream: http://www.cplusplus.com/reference/iostream/ifstream/
 	string variable, value;
 
 	while (confFile.good()) {
-		getline(confFile, variable, thisDelimeter);
+		getline(confFile, variable, thisDelimeter.c_str()[0]);
 		getline(confFile, value, '\n');
 		//cout << "\"" << variable << "\", \"" << value << "\"" << endl;
 		if (variable == "numBackupsToKeep") {
@@ -433,7 +442,7 @@ string readFolderConfig(string configLoc, int* backupsToKeep, string thisDelimet
 */
 string ensureStorageDir(string storageDirLoc, int tabLevel = 1) {
 	string output = "";
-	
+
 	if (!checkFilePath(storageDirLoc, true)) {
 		output += outputText("r", "Storage folder not found. Creating...", false, tabLevel);
 		createDirectory(storageDirLoc);
@@ -524,8 +533,9 @@ string getListOfFilesToGet(string syncRetrieveListLoc, vector<string>* toGetList
 
 	while (getListFile.good()) {
 		getline(getListFile, fileToGet, '\n');
-		fileToGet.erase(remove(fileToGet.begin(), fileToGet.end(), '\n'), fileToGet.end());
-		fileToGet.erase(remove(fileToGet.begin(), fileToGet.end(), '\r'), fileToGet.end());
+		//why?
+		//fileToGet.erase(remove(fileToGet.begin(), fileToGet.end(), '\n'), fileToGet.end());
+		//fileToGet.erase(remove(fileToGet.begin(), fileToGet.end(), '\r'), fileToGet.end());
 		if (fileToGet != "") {
 			//cout << "file to get: \"" << fileToGet << "\"" << endl;
 			toGetList->push_back(fileToGet);
@@ -552,7 +562,7 @@ string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector
 	//get directory and file list
 	vector<string> dirList;
 	vector<string> fileList;
-	getItemsInDir(storeDir, &fileList, &dirList);
+	getItemsInDir(storFolderLoc, &fileList, &dirList);
 
 	//process directories recursively
 	for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
@@ -570,7 +580,7 @@ string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector
 			copyFile(syncFolderLoc + foldSeparater + *it, storFolderLoc);
 			output += outputText("r", "Done.", false, tabLevel + 2);
 			//remove file
-			remove(syncFolderLoc + foldSeparater + *it);
+			remove((syncFolderLoc + foldSeparater + *it).c_str());
 		}
 	}
 
@@ -630,13 +640,13 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 
 	//process config folder
 	output += ensureFolderConfig(syncConfigLoc);
-	output += readFolderConfig(syncConfigLoc, &numToKeep, delimeter, tabLevel + 1);
+	output += readFolderConfig(syncConfigLoc, &numToKeep, delimeter + "", tabLevel + 1);
 
 	//get list from getList file
 	output += getListOfFilesToGet(syncRetrieveListLoc, &getList);
 	output += outputText("r", "Getting the following files back:", false, tabLevel + 1);
-	for (vector<string>::iterator it = getList->begin(); it != getList->end(); ++it) {
-		output += outputText("r", *it, false, tabLevel + 1);
+	for (vector<string>::iterator it = getList.begin(); it != getList.end(); ++it) {
+		output += outputText("r", *it, false, tabLevel + 2);
 	}
 	output += outputText("r", "End List.", false, tabLevel + 1);
 
@@ -653,7 +663,7 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	}
 
 	//for each file in sync folder (not in ignore list), move it into the storage folder, removing it from the sync folder
-	output += moveSyncFolderContents(syncDirLoc, storeDirLoc, tabLevel + 1);
+	output += moveSyncFolderContents(syncDirLoc, storeDirLoc, &ignoreList, "", tabLevel + 1);
 
 	//if not already moved to sync, move files in retrieveList to sync. remove them from storage
 	output += moveFilesToGet(storeDirLoc, syncDirLoc, &getList);
@@ -720,7 +730,7 @@ bool setRunOnStart() {
 
 
 //processSyncFolder(string storageDir, string curDir, )
-
+/*
 int searchInnerSyncDir(string dir) {
 	//folder config vars
 	string syncConfigLoc = dir + foldSeparater + clientConfigFileName;
@@ -833,7 +843,7 @@ int searchInnerSyncDir(string dir) {
 	refreshFileList(syncFileListLoc, thisStorageFolder);
 
 }//searchInnerSyncDir
-
+*/
 
 
 
