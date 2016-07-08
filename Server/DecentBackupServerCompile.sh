@@ -2,4 +2,4 @@
 #
 # Script to compile the Server
 
-g++ -std=c++0x -o DecentBackupServer.out DecentBackupServer.cpp
+g++ -std=c++0x -o bin/DecentBackupServer.out src/DecentBackupServer.cpp
