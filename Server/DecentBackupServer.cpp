@@ -27,14 +27,12 @@
 #include <vector>//for lists of things
 #include <dirent.h>//for looking at contents of directory
 
-//#include <algorithm> //for checking file extentions
-
 //sleep stuff/ other sys dependent stuff
 #ifdef __linux__
 #include <unistd.h>//sleep, rm dir
 #endif
 #ifdef _WIN32
-#include <windows.h>
+#include <windows.h>//sleep
 #endif
 
 //usings
@@ -56,7 +54,7 @@ string storFolderLoc = storFolderPred + "dir";
 
 const string clientConfigFileName = "DBSS_CLIENT_CONF.txt";
 const string clientSyncFileListName = "DBSS_STORED_FILES.txt";
-const string clientSyncGetFileList = "DBSS_TO_GET_LIST.txt";
+const string clientSyncGetFileListName = "DBSS_TO_GET_LIST.txt";
 
 int checkInterval = 60;//in seconds
 
@@ -66,6 +64,7 @@ bool helpFlag = false;//if to display the help (stops the execution after displa
 bool listFlag = false;//
 bool verbose = false;//if to output much more to console
 bool setToStartOnStart = false;//if to set the program to run on startup
+bool runTest = false;//if to run the test code
 
 /* for sync folder config */
 int numBackupsToKeepDef = -1;
@@ -206,7 +205,7 @@ string outputText(string types, string message, bool verbosity = true, int tabLe
 	if(types.find('r') != string::npos){
 		return outputText;
 	}
-	return NULL;
+	return "";
 }//outputText
 
 /**
@@ -245,14 +244,15 @@ string getLastPartOfPath(string path) {
 	@param fromPath The path of the file to move.
 	@param toDir The directory to move the file into.
 */
-void copyFile(string fromPath, string toDir) {
+string copyFile(string fromPath, string toDir, int tabLevel = 3) {
+	string output = "";
 	if (!checkFilePath(toDir, true)) {
 		createDirectory(toDir);
 	}
 	//create destination location
 	string toPath = toDir + foldSeparater + getLastPartOfPath(fromPath);
 
-	//TODO:: check if file already present where copying; remove it if there.
+	//TODO:: check if file already present where copying; remove it first if there?
 
 	//open file streams
 	ifstream  src(fromPath.c_str(), ios::binary);
@@ -262,6 +262,7 @@ void copyFile(string fromPath, string toDir) {
 	//close the files
 	src.close();
 	dst.close();
+	return output;
 }
 
 /**
@@ -295,15 +296,20 @@ long getFileSize(string file) {
 	@param itemList The pointer of the vector we are putting items into.
 */
 void getItemsInDir(string dirLoc, vector<string>* itemList) {
+	//cout << "Searching: " << dirLoc << endl;
 	DIR *pDIR;
 	struct dirent *entry;
 	if (pDIR = opendir(dirLoc.c_str())) {
 		while (entry = readdir(pDIR)) {
+
 			if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+				//cout << "FOUND ITEM: " << entry->d_name << endl;
 				itemList->push_back(entry->d_name);
 			}
 		}
 		closedir(pDIR);
+	}else{
+		cout << "ERROR:::::: Could not open directory (" << dirLoc << ")for inspection." << endl;
 	}
 	return;
 }
@@ -318,8 +324,12 @@ void getItemsInDir(string dirLoc, vector<string>* itemList) {
 	@param wholePath Optional param to add the whole path to the files & folders.
 */
 void getItemsInDir(string dirLoc, vector<string>* fileList, vector<string>* dirList, bool wholePath = false) {
+	//cout << "Getting items in \"" << dirLoc << "\":";
 	vector<string> itemList;
 	getItemsInDir(dirLoc, &itemList);
+
+	//cout << " # items: " << itemList.size() << endl;
+
 
 	for (vector<string>::iterator it = itemList.begin(); it != itemList.end(); ++it) {
 		if (checkFilePath(dirLoc + foldSeparater + *it, true)) {//is directory
@@ -339,7 +349,7 @@ void getItemsInDir(string dirLoc, vector<string>* fileList, vector<string>* dirL
 }
 
 /**
-	Determines if the givben directory is empty.
+	Determines if the given directory is empty.
 
 	@param dirLoc The location of the directory to test for emptiness.
 */
@@ -469,7 +479,7 @@ string cropNumInStor(string storDir, int numToKeep, int tabLevel = 1) {
 	}
 	string output = outputText("r", "Cropping number of files in the storage folder...", false, tabLevel);
 
-	//TODO:: go through each folder, cropping the number of files in each to the number given
+	//TODO:: crop number of items in folder to the number given
 }
 
 /**
@@ -481,7 +491,7 @@ string cropNumInStor(string storDir, int numToKeep, int tabLevel = 1) {
 	@param tabLevel The number of tabs put in front of output lines. (optional)
  */
 string refreshFileList(ofstream& fileListFile, string storeDir, string levels = "", int tabLevel = 1) {
-	string output = outputText("r", "Getting files in \"" + storeDir +"\"...", false, tabLevel);
+	string output = outputText("r", "Refreshing file list for files in \"" + storeDir +"\"...", false, tabLevel);
 
 	if (!fileListFile.good()) {
 		output += outputText("cl", "ERROR:: Unable to write to file list.", verbose, tabLevel + 1);
@@ -491,11 +501,11 @@ string refreshFileList(ofstream& fileListFile, string storeDir, string levels = 
 	vector<string> dirList;
 	vector<string> fileList;
 	getItemsInDir(storeDir, &fileList, &dirList);
-
+	//get files in subfolder:
 	for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
 		output += refreshFileList(fileListFile, storeDir + foldSeparater + *it, levels + *it + foldSeparater, tabLevel + 1);
 	}
-
+	//list files
 	for (vector<string>::iterator it = fileList.begin(); it != fileList.end(); ++it) {
 		fileListFile << levels << *it << endl;
 	}
@@ -505,19 +515,21 @@ string refreshFileList(ofstream& fileListFile, string storeDir, string levels = 
 /**
 	Refreshes the file list with the items in the storage directory.
 
+	Wrapper for the recursive one.
+
 	@param fileListLoc The location of the file list file.
 	@param storeDir The location of the storage directory.
 	@param tabLevel The number of tabs put in front of output lines.
  */
 string refreshFileList(string fileListLoc, string storeDir, int tabLevel = 1) {
-	string output = outputText("r", "Refreshing file list...", false, tabLevel);
+	string output = outputText("r", "Refreshing file list... (" + fileListLoc + ")", false, tabLevel);
 
-	ofstream fileListFile(fileListLoc.c_str());
+	ofstream fileListFile(fileListLoc.c_str(), ofstream::trunc);
+	//fileListFile << "hello?";
 	output += refreshFileList(fileListFile, storeDir, "", tabLevel + 1);
 	fileListFile.close();
 	return output + outputText("r", "Done.", false, tabLevel);
 }
-
 
 /**
 	Gets a list of files to retrieve and put into the sync folder, and clear the get list as it goes.
@@ -527,7 +539,7 @@ string refreshFileList(string fileListLoc, string storeDir, int tabLevel = 1) {
 	@param tabLevel The number of tabs put in front of output lines.
 */
 string getListOfFilesToGet(string syncRetrieveListLoc, vector<string>* toGetList, int tabLevel = 1) {
-	string output = outputText("r", "Refreshing file list...", false, tabLevel);
+	string output = outputText("r", "Getting list of files to keep in sync folder...", false, tabLevel);
 	ifstream getListFile(syncRetrieveListLoc.c_str());
 	string fileToGet;
 
@@ -562,27 +574,40 @@ string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector
 	//get directory and file list
 	vector<string> dirList;
 	vector<string> fileList;
-	getItemsInDir(storFolderLoc, &fileList, &dirList);
+	getItemsInDir(syncFolderLoc, &fileList, &dirList);
 
 	//process directories recursively
-	for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
-		output += moveSyncFolderContents(syncFolderLoc + foldSeparater + *it, storFolderLoc + foldSeparater + *it, ignoreList, levels + foldSeparater + *it, tabLevel + 1);
-	}
-
-	//process files
-	output += outputText("r", "Transferring files....", false, tabLevel + 1);
-	for (vector<string>::iterator it = fileList.begin(); it != fileList.end(); ++it) {
-		if (find(ignoreList->begin(), ignoreList->end(), syncFolderLoc + foldSeparater + *it) != ignoreList->end()) {
-			output += outputText("r", "Skipping (in ignore or get list) \"" + levels + foldSeparater + *it + "\".", false, tabLevel + 2);
-		} else {
-			//move file
-			output += outputText("r", "Moving \"" + levels + foldSeparater + *it + "\"...", false, tabLevel + 2);
-			copyFile(syncFolderLoc + foldSeparater + *it, storFolderLoc);
-			output += outputText("r", "Done.", false, tabLevel + 2);
-			//remove file
-			remove((syncFolderLoc + foldSeparater + *it).c_str());
+	unsigned long numDir = dirList.size();
+	output += outputText("r", "Processing sub folders (" + to_string(numDir) + ")...", false, tabLevel + 1);
+	if(dirList.size() == 0){
+		output += outputText("r", "--None--", false, tabLevel + 2);
+	}else{
+		for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
+			output += moveSyncFolderContents(syncFolderLoc + foldSeparater + *it, storFolderLoc + foldSeparater + *it, ignoreList, levels + foldSeparater + *it, tabLevel + 2);
 		}
 	}
+	output += outputText("r", "Done.", false, tabLevel + 1);
+
+	//process files
+	unsigned long numFiles = fileList.size();
+	output += outputText("r", "Transferring files (" + to_string(numFiles) + ")...", false, tabLevel + 1);
+	if(fileList.size() == 0){
+		output += outputText("r", "--None--", false, tabLevel + 2);
+	}else{
+		for (vector<string>::iterator it = fileList.begin(); it != fileList.end(); ++it) {
+			if (find(ignoreList->begin(), ignoreList->end(), syncFolderLoc + foldSeparater + *it) != ignoreList->end()) {
+				output += outputText("r", "Skipping (in ignore or get list) \"" + levels + foldSeparater + *it + "\".", false, tabLevel + 2);
+			} else {
+				//move file
+				output += outputText("r", "Moving \"" + levels + foldSeparater + *it + "\"...", false, tabLevel + 2);
+				copyFile(syncFolderLoc + foldSeparater + *it, storFolderLoc);
+				output += outputText("r", "Done.", false, tabLevel + 2);
+				//remove file
+				remove((syncFolderLoc + foldSeparater + *it).c_str());
+			}
+		}
+	}
+	output += outputText("r", "Done.", false, tabLevel + 1);
 
 	//remove sync folder for this iteration
 	if (dirIsEmpty(syncFolderLoc)) {
@@ -617,7 +642,13 @@ string moveFilesToGet(string storageDir, string syncDir, vector<string>* toGetLi
 	return output + outputText("r", "Done.", false, tabLevel);
 }
 
-string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, bool verbosity = verbose, string configFileName = clientConfigFileName, string syncFileListName = clientSyncGetFileList, string getListFileName = clientSyncFileListName, int thisNumBackupsToKeep = numBackupsToKeepDef, string thisFoldSeparater = foldSeparater, string thisnlc = nlc) {
+
+// TODO::
+	// handle moving folders back to the sync folder
+	// ignore list
+	// handle deleting files better?
+	//status file?
+string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, bool verbosity = verbose, string configFileName = clientConfigFileName, string syncFileListName = clientSyncFileListName, string getListFileName = clientSyncGetFileListName, int thisNumBackupsToKeep = numBackupsToKeepDef, string thisFoldSeparater = foldSeparater, string thisnlc = nlc) {
 	string output = outputText("r", "Processing folder:\"" + syncDirLoc + "\"...", false, tabLevel);
 	output += outputText("r", "Storage directory: \"" + storeDirLoc + "\"", false, tabLevel + 1);
 
@@ -645,8 +676,12 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	//get list from getList file
 	output += getListOfFilesToGet(syncRetrieveListLoc, &getList);
 	output += outputText("r", "Getting the following files back:", false, tabLevel + 1);
-	for (vector<string>::iterator it = getList.begin(); it != getList.end(); ++it) {
-		output += outputText("r", *it, false, tabLevel + 2);
+	if(getList.size() == 0){
+		output += outputText("r", "--None--", false, tabLevel + 2);
+	}else{
+		for (vector<string>::iterator it = getList.begin(); it != getList.end(); ++it) {
+			output += outputText("r", *it, false, tabLevel + 2);
+		}
 	}
 	output += outputText("r", "End List.", false, tabLevel + 1);
 
@@ -690,9 +725,9 @@ void searchSyncDir() {
 		string curSyncFolder = syncFolderLoc + foldSeparater + *it;
 		string curStorFolder = storFolderLoc + foldSeparater + *it;
 		if (checkFilePath(curSyncFolder, true)) {
-			outputText("cl", "Processing sync folder \"" + curSyncFolder + "\"...", verbose, 2);
+			//outputText("cl", "Processing sync folder \"" + curSyncFolder + "\"...", verbose, 2);
 			//TODO:: do this with thread pooling
-			outputText("cl", processSyncDir(curSyncFolder, curStorFolder), verbose, 2);
+			outputText("cl", "Finished processing folder. Output:" + nlc + nlc + processSyncDir(curSyncFolder, curStorFolder) + "End of output." + nlc, verbose, 0);
 			//cropNumInStor(curSyncFolder, searchInnerSyncDir(curSyncFolder));
 		}
 	}
@@ -720,131 +755,6 @@ bool setRunOnStart() {
 /////////////////
 #pragma endregion MiscOperations
 /////////////////
-
-
-
-
-
-
-
-
-
-//processSyncFolder(string storageDir, string curDir, )
-/*
-int searchInnerSyncDir(string dir) {
-	//folder config vars
-	string syncConfigLoc = dir + foldSeparater + clientConfigFileName;
-	string syncFileListLoc = dir + foldSeparater + clientSyncFileListName;
-	string syncRetrieveListLoc = dir + foldSeparater + clientSyncGetFileList;
-
-	string thisStorageFolder = storFolderLoc + foldSeparater + getLastPartOfPath(dir);
-
-	vector<string> getList;
-	vector<string> ignoreList;
-	ignoreList.push_back(syncConfigLoc);
-	ignoreList.push_back(syncFileListLoc);
-	ignoreList.push_back(syncRetrieveListLoc);
-
-
-	numBackupsToKeep = numBackupsToKeepDef;
-
-	//test if config present, make it if its not
-	if (!checkFilePath(syncConfigLoc, false)) {
-		outputText("cl", "**** Unable to open sync config file. Creating a new one (\"" + syncConfigLoc + "\")...", verbose, 3);
-		generateFolderConfig(syncConfigLoc);
-		if (!checkFilePath(syncConfigLoc, false)) {
-			outputText("cl", "**** ERROR:: Unable to create or open sync config file.", verbose, 3);
-			return -1;
-		}
-		else {
-			outputText("cl", "**** Created default sync config for \"" + dir + "\".", verbose, 3);
-		}
-	}
-	readFolderConfig(syncConfigLoc);
-
-	//test if the file list is present
-	if (!checkFilePath(syncFileListLoc, false)) {
-		outputText("cl", "**** Unable to open stored file list. Creating a new one (\"" + syncFileListLoc + "\")...", verbose, 3);
-		ofstream confFile(syncFileListLoc.c_str());
-		confFile.close();
-		if (!checkFilePath(syncFileListLoc, false)) {
-			outputText("cl", "**** ERROR:: Unable to create or open stored file list.", verbose, 3);
-			return -1;
-		}
-		else {
-			outputText("cl", "**** Created stored file list for \"" + dir + "\".", verbose, 3);
-		}
-	}
-
-
-	refreshFileList(syncFileListLoc, thisStorageFolder);
-
-	//test if the list to get is present
-	if (!checkFilePath(syncRetrieveListLoc, false)) {
-		outputText("cl", "**** Unable to open list of files to get. Creating a new one (\"" + syncRetrieveListLoc + "\")...", verbose, 3);
-		ofstream confFile(syncRetrieveListLoc.c_str());
-		confFile.close();
-		if (!checkFilePath(syncRetrieveListLoc, false)) {
-			outputText("cl", "**** ERROR:: Unable to create or open list of files to get.", verbose, 3);
-			return -1;
-		}
-		else {
-			outputText("cl", "**** Created list of files to get for \"" + dir + "\".", verbose, 3);
-		}
-	}
-	getListOfFilesToGet(syncRetrieveListLoc, &getList);
-
-	outputText("cl", "Searching \"" + dir + "\" for new files to store...", verbose, 3);
-
-	DIR *pDIR;
-	struct dirent *entry;
-	if (pDIR = opendir(dir.c_str())) {
-		while (entry = readdir(pDIR)) {
-			if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-				string curFile = dir + foldSeparater + (string)entry->d_name;
-				if (checkFilePath(curFile, false)
-					&& !(find(ignoreList.begin(), ignoreList.end(), curFile) != ignoreList.end())
-					&& !(find(getList.begin(), getList.end(), (string)entry->d_name) != getList.end())) {
-					outputText("cl", "Found: \"" + curFile + "\". Dealing with it...", verbose, 4);
-					//wait until fully transferred
-					outputText("cl", "Waiting/Checking for full sync transfer...", verbose, 5);
-					long initSize, tempSize;
-					do {
-						initSize = getFileSize(curFile);
-						mySleep(transferWait);
-						tempSize = getFileSize(curFile);
-					} while (initSize != tempSize);
-					outputText("cl", "Done.", verbose, 4);
-					//transfer to storage
-					outputText("cl", "Transferring to storage folder...", verbose, 5);
-					copyFile(curFile, thisStorageFolder);
-					outputText("cl", "Done.", verbose, 4);
-
-					//remove original file
-					outputText("cl", "Removing file from sync folder...", verbose, 5);
-					if (remove(curFile.c_str()) != 0) {
-						outputText("cl", "***** Method returned nonzero.", verbose, 6);
-					}
-					outputText("cl", "Done.", verbose, 5);
-
-					outputText("cl", "Done.", verbose, 4);
-				}
-			}
-		}
-		closedir(pDIR);
-	}
-	outputText("cl", "Done.", verbose, 3);
-	//move files they want to retrieve to sync
-	outputText("cl", "Moving files in list to get...", verbose, 3);
-	moveFilesToGet(thisStorageFolder, dir, &getList);
-	outputText("cl", "Done.", verbose, 3);
-
-	//refresh list of files in storage
-	refreshFileList(syncFileListLoc, thisStorageFolder);
-
-}//searchInnerSyncDir
-*/
-
 
 
 
@@ -991,7 +901,18 @@ void readMainConfig() {
 
 
 
+void test(){
+	cout << "test" << endl;
 
+	vector<string> list;
+
+	getItemsInDir("DBSS_sync_dir/test", &list);
+
+	for (vector<string>::iterator it = list.begin(); it != list.end(); ++it) {
+		cout << *it << endl;
+	}
+
+}
 
 
 
@@ -1031,6 +952,8 @@ int main(int argc, char *argv[]){
 			outputText("c", "Config file set to: \"" + confFileLoc + "\"", true);
 		}else if(string(argv[curArg]) == "-s"){
 			setToStartOnStart = true;
+		}else if(string(argv[curArg]) == "-t"){
+			runTest = true;
 		}else{//debugging
 			//cout << endl;
 		}
@@ -1038,6 +961,11 @@ int main(int argc, char *argv[]){
 	}
 	//cout << "Done." << endl;
 	~curArg;
+
+	if(runTest){
+		test();
+		return 0;
+	}
 
 	if(helpFlag){
 		cout << endl <<
