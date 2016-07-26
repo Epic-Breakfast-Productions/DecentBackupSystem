@@ -55,6 +55,7 @@ string storFolderLoc = storFolderPred + "dir";
 const string clientConfigFileName = "DBSS_CLIENT_CONF.txt";
 const string clientSyncFileListName = "DBSS_STORED_FILES.txt";
 const string clientSyncGetFileListName = "DBSS_TO_GET_LIST.txt";
+const string clientSyncIgnoreFileListName = "DBSS_IGNORE_LIST.txt";
 
 int checkInterval = 60;//in seconds
 
@@ -229,6 +230,8 @@ char getSeparater(string url){
 /**
 	Creates a directory.
 
+	TODO:: check for possible infinite loops? will do so if cannot ever create any of the parent directories
+
 	@param directoryLocation The directory you wish to create.
 */
 void createDirectory(string directoryLocation){
@@ -399,6 +402,26 @@ bool dirIsNotEmpty(string dirLoc) {
 	return !dirIsEmpty(dirLoc);
 }
 
+/**
+	Generalized function for getting a list of files from a file.
+
+	Accepts a '#' as a comment, and ignores the line.
+
+	@param fileListFile The file to read the list from.
+	@param fileList The vector to put the locations into.
+ */
+void readFileList(string fileListLoc, vector<string>* fileList){
+	ifstream fileListFile(fileListLoc.c_str());
+	string curLine;
+	while (fileListFile.good()) {
+		getline(fileListFile, curLine, '\n');
+		if (curLine != "" && curLine.at(0) != '#') {
+			fileList->push_back(curLine);
+		}
+	}
+	fileListFile.close();
+}
+
 
 /////////////////
 #pragma endregion folderOps
@@ -563,7 +586,9 @@ string refreshFileList(string fileListLoc, string storeDir, int tabLevel = 1) {
 }
 
 /**
-	Ensures the
+	Ensures the list of files to get is preset.
+
+	TODO:: doc
 */
 string ensureGetList(string getListLoc, int tabLevel = 1) {
 	string output = outputText("r", "Ensuring get list is present...", false, tabLevel);
@@ -593,23 +618,36 @@ string ensureGetList(string getListLoc, int tabLevel = 1) {
 string getListOfFilesToGet(string syncRetrieveListLoc, vector<string>* toGetList, int tabLevel = 1) {
 	string output = outputText("r", "Getting list of files to keep in sync folder...", false, tabLevel);
 	output += ensureGetList(syncRetrieveListLoc, tabLevel + 1);
-	ifstream getListFile(syncRetrieveListLoc.c_str());
-	string fileToGet;
+	readFileList(syncRetrieveListLoc, toGetList);
+	return output + outputText("r", "Done.", false, tabLevel);
+}
 
-	while (getListFile.good()) {
-		getline(getListFile, fileToGet, '\n');
-
-		//TODO:: handle "/*" cases for everything in a folder
-
-		//why?
-		//fileToGet.erase(remove(fileToGet.begin(), fileToGet.end(), '\n'), fileToGet.end());
-		//fileToGet.erase(remove(fileToGet.begin(), fileToGet.end(), '\r'), fileToGet.end());
-		if (fileToGet != "") {
-			//cout << "file to get: \"" << fileToGet << "\"" << endl;
-			toGetList->push_back(fileToGet);
+string ensureIgnoreList(string ignoreListLoc, int tabLevel = 1) {
+	string output = outputText("r", "Ensuring ignore list is present...", false, tabLevel);
+	if(!checkFilePath(ignoreListLoc, false)){
+		output += outputText("r", "Get list not found. Creating...", false, tabLevel + 1);
+		ofstream ignoreListFile(ignoreListLoc.c_str(), ofstream::trunc);
+		ignoreListFile << "# default; accounts for typical folder sync services" << endl
+			<< "/.sync" << endl << "# add yours after this line:" << endl;
+		ignoreListFile.close();
+		if(!checkFilePath(ignoreListLoc, false)){
+			output += outputText("r", "ERROR:: Unable to create get list.", false, tabLevel + 2);
+		}else{
+			output + outputText("r", "Done.", false, tabLevel + 1);
 		}
+	} else {
+		output += outputText("r", "Get list is present!", false, tabLevel + 1);
 	}
-	getListFile.close();
+	return output + outputText("r", "Done.", false, tabLevel);
+}
+
+/**
+	TODO:: doc
+ */
+string getListOfFilesToIgnore(string syncIgnoreListLoc, vector<string>* toIgnoreList, int tabLevel = 1) {
+	string output = outputText("r", "Getting list of files to ignore in sync folder...", false, tabLevel);
+	output += ensureGetList(syncIgnoreListLoc, tabLevel + 1);
+	readFileList(syncIgnoreListLoc, toIgnoreList);
 	return output + outputText("r", "Done.", false, tabLevel);
 }
 
@@ -639,7 +677,11 @@ string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector
 		output += outputText("r", "--None--", false, tabLevel + 2);
 	}else{
 		for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
-			output += moveSyncFolderContents(syncFolderLoc + foldSeparater + *it, storFolderLoc + foldSeparater + *it, ignoreList, levels + foldSeparater + *it, tabLevel + 2);
+			if (find(ignoreList->begin(), ignoreList->end(), foldSeparater + *it) != ignoreList->end()) {
+				output += outputText("r", "Skipping (in ignore or get list) \"" + levels + foldSeparater + *it + "\".", false, tabLevel + 2);
+			}else{
+				output += moveSyncFolderContents(syncFolderLoc + foldSeparater + *it, storFolderLoc + foldSeparater + *it, ignoreList, levels + foldSeparater + *it, tabLevel + 2);
+			}
 		}
 	}
 	output += outputText("r", "Done.", false, tabLevel + 1);
@@ -673,6 +715,10 @@ string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector
 	return output + outputText("r", "Done.", false, tabLevel);
 }
 
+/**
+	TODO:: doc
+	TODO:: account for whole folders
+ */
 string moveFilesToGet(string storFolderLoc, string syncFolderLoc, vector<string>* getList, string levels = "", int tabLevel = 1) {
 	string output = outputText("r", "Moving files and folders to get in \"" + storFolderLoc + "\" to \"" + syncFolderLoc + "\"...", false, tabLevel);
 	//ensure storage folder location
@@ -729,13 +775,11 @@ string moveFilesToGet(string storFolderLoc, string syncFolderLoc, vector<string>
 }
 
 // TODO::
-	// handle moving folders back to the sync folder
 	// delete empty folders in storage
-	// ignore list?
 	// handle deleting files better?
-	//status file?
+	// status file?
 	//handle replacing stored dir/files with new incoming ones
-string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, bool verbosity = verbose, string configFileName = clientConfigFileName, string syncFileListName = clientSyncFileListName, string getListFileName = clientSyncGetFileListName, int thisNumBackupsToKeep = numBackupsToKeepDef, string thisFoldSeparater = foldSeparater, string thisnlc = nlc) {
+string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, bool verbosity = verbose, string configFileName = clientConfigFileName, string syncFileListName = clientSyncFileListName, string getListFileName = clientSyncGetFileListName, string ignoreListFileName = clientSyncIgnoreFileListName, int thisNumBackupsToKeep = numBackupsToKeepDef, string thisFoldSeparater = foldSeparater, string thisnlc = nlc) {
 	string output = outputText("r", "Processing folder:\"" + syncDirLoc + "\"...", false, tabLevel);
 	output += outputText("r", "Storage directory: \"" + storeDirLoc + "\"", false, tabLevel + 1);
 
@@ -747,6 +791,7 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	string syncConfigLoc = syncDirLoc + thisFoldSeparater + configFileName;
 	string syncFileListLoc = syncDirLoc + thisFoldSeparater + syncFileListName;
 	string syncRetrieveListLoc = syncDirLoc + thisFoldSeparater + getListFileName;
+	string syncIgnoreListLoc = syncDirLoc + thisFoldSeparater + ignoreListFileName;
 
 	//lists of files
 	vector<string> getList;
@@ -755,12 +800,15 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	ignoreList.push_back(syncConfigLoc);
 	ignoreList.push_back(syncFileListLoc);
 	ignoreList.push_back(syncRetrieveListLoc);
+	ignoreList.push_back(syncIgnoreListLoc);
 
 	//process config folder
 	output += ensureFolderConfig(syncConfigLoc);
 	output += readFolderConfig(syncConfigLoc, &numToKeep, delimeter + "", tabLevel + 1);
 
-
+	//process ignore folder
+	output += ensureIgnoreList(syncIgnoreListLoc);
+	output += getListOfFilesToIgnore(syncIgnoreListLoc, &ignoreList);
 
 	//get list from getList file
 	output += getListOfFilesToGet(syncRetrieveListLoc, &getList);
