@@ -72,7 +72,7 @@ int numBackupsToKeepDef = -1;
 int numBackupsToKeep = numBackupsToKeepDef;
 
 /* Other */
-int transferWait = 1;//the amount of time to wait to se if a file has finished transferring, in seconds
+int transferWait = 3;//the amount of time to wait to se if a file has finished transferring, in seconds
 
 //sleep stuff/ other sys dependent stuff
 #ifdef __linux__
@@ -268,43 +268,6 @@ string getLastPartOfPath(string path) {
 }
 
 /**
-	Copies a file from a path into the given directory. Creates the destination directory if it is not present.
-
-	TODO:: find out if this removes the file.
-
-	@param fromPath The path of the file to move.
-	@param toDir The directory to move the file into.
-*/
-string copyFile(string fromPath, string toDir, int tabLevel = 3) {
-
-	string output = outputText("r", "Copying file \"" + fromPath + "\" to \"" + toDir + "\"...", false, tabLevel);
-
-
-	if (!checkFilePath(toDir, true)) {
-		createDirectory(toDir);
-	}
-	//create destination location
-	string toPath = toDir + foldSeparater + getLastPartOfPath(fromPath);
-
-	//TODO:: check if file already present where copying; remove it first if there?
-
-	//open file streams
-	ifstream  src(fromPath.c_str(), ios::binary);
-	ofstream  dst(toPath.c_str(), ios::binary);
-	//move data
-	dst << src.rdbuf();
-	//close the files
-	src.close();
-	dst.close();
-
-	if(!checkFilePath(toPath, true)){
-		output += outputText("r", "ERROR:: file NOT copied. Destination file not present after copy attempt.", false, tabLevel + 1);
-	}
-
-	return output + outputText("r", "Done.", false, tabLevel);
-}
-
-/**
 	Gets the size of the file.
 
 	@param file The file to get the size of.
@@ -315,6 +278,55 @@ long getFileSize(string file) {
 	stat(file.c_str(), &filestatus);
 	return filestatus.st_size;
 }
+
+/**
+	Copies a file from a path into the given directory. Creates the destination directory if it is not present.
+
+	TODO:: find out if this removes the file.
+
+	@param fromPath The path of the file to move.
+	@param toDir The directory to move the file into.
+*/
+string copyFile(string fromPath, string toDir, int tabLevel = 3) {
+	string output = outputText("r", "Copying file \"" + fromPath + "\" to \"" + toDir + "\"...", false, tabLevel);
+
+	if (!checkFilePath(toDir, true)) {
+		createDirectory(toDir);
+	}
+	//create destination location
+	string toPath = toDir + foldSeparater + getLastPartOfPath(fromPath);
+
+	//TODO:: check if file already present where copying; remove it first if there?
+
+	// check/wait for file to be done transferring
+	output += outputText("r", "Checking for complete transfer of file...", false, tabLevel + 1);
+	long initSize, tempSize;
+	do {
+		initSize = getFileSize(fromPath);
+		mySleep(transferWait);
+		tempSize = getFileSize(fromPath);
+		if(initSize != tempSize){
+			output += outputText("r", "Still transferring.", false, tabLevel + 2);
+		}
+	} while (initSize != tempSize);
+	output += outputText("r", "Done.", false, tabLevel + 1);
+
+	//open file streams
+	ifstream  src(fromPath.c_str(), ios::binary);
+	ofstream  dst(toPath.c_str(), ios::binary);
+	//move data
+	dst << src.rdbuf();
+	//close the files
+	src.close();
+	dst.close();
+
+	if(!checkFilePath(toPath, false)){
+		output += outputText("r", "ERROR:: file NOT copied. Destination file not present after copy attempt.", false, tabLevel + 1);
+	}
+	return output + outputText("r", "Done.", false, tabLevel);
+}
+
+
 
 /////////////////
 #pragma endregion workers
@@ -383,6 +395,22 @@ void getItemsInDir(string dirLoc, vector<string>* fileList, vector<string>* dirL
 }
 
 /**
+	Gets the directories in a given directory.
+
+	TODO:: doc
+ */
+void getDirsInDir(string dirLoc, vector<string>* dirList, bool wholePath = false) {
+	//cout << "Getting items in \"" << dirLoc << "\":";
+	vector<string> itemList;
+	getItemsInDir(dirLoc, &itemList, wholePath);
+	for (vector<string>::iterator it = itemList.begin(); it != itemList.end(); ++it) {
+		if (checkFilePath(dirLoc + foldSeparater + *it, true)) {//is directory
+			dirList->push_back(*it);
+		}
+	}//foreach item in dir
+}
+
+/**
 	Determines if the given directory is empty.
 
 	@param dirLoc The location of the directory to test for emptiness.
@@ -420,6 +448,25 @@ void readFileList(string fileListLoc, vector<string>* fileList){
 		}
 	}
 	fileListFile.close();
+}
+
+/**
+	Removes any empty sub directories in the given directory.
+	Recursively checks all sub folders
+
+	TODO:: doc
+ */
+void removeEmptySubfolders(string parentDir){
+	vector<string> subDirs;
+	getDirsInDir(parentDir, &subDirs);
+	string curDir;
+	for (vector<string>::iterator it = subDirs.begin(); it != subDirs.end(); ++it) {
+		curDir = parentDir + foldSeparater + *it;
+		removeEmptySubfolders(curDir);
+		if(dirIsEmpty(curDir)){
+			removeDirectory(curDir);
+		}
+	}
 }
 
 
@@ -661,14 +708,12 @@ string getListOfFilesToIgnore(string syncIgnoreListLoc, vector<string>* toIgnore
 	@param tabLevel The number of tabs put in front of output lines.
 */
 string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector<string>* ignoreList, string levels = "", int tabLevel = 1) {
-	string output = outputText("r", "Moving files and folders in \"" + syncFolderLoc + "\" to \"" + storFolderLoc + "\"...", false, tabLevel);
-	//ensure storage folder location
-	ensureStorageDir(storFolderLoc, tabLevel + 1);
+	string output = outputText("r", "Moving files and folders in \"" + syncFolderLoc + levels + "\" to \"" + storFolderLoc + levels + "\"...", false, tabLevel);
 
 	//get directory and file list
 	vector<string> dirList;
 	vector<string> fileList;
-	getItemsInDir(syncFolderLoc, &fileList, &dirList);
+	getItemsInDir(syncFolderLoc + levels, &fileList, &dirList);
 
 	//process directories recursively
 	unsigned long numDir = dirList.size();
@@ -677,10 +722,10 @@ string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector
 		output += outputText("r", "--None--", false, tabLevel + 2);
 	}else{
 		for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
-			if (find(ignoreList->begin(), ignoreList->end(), foldSeparater + *it) != ignoreList->end()) {
+			if (find(ignoreList->begin(), ignoreList->end(), levels + foldSeparater + *it) != ignoreList->end()) {
 				output += outputText("r", "Skipping (in ignore or get list) \"" + levels + foldSeparater + *it + "\".", false, tabLevel + 2);
 			}else{
-				output += moveSyncFolderContents(syncFolderLoc + foldSeparater + *it, storFolderLoc + foldSeparater + *it, ignoreList, levels + foldSeparater + *it, tabLevel + 2);
+				output += moveSyncFolderContents(syncFolderLoc, storFolderLoc, ignoreList, levels + foldSeparater + *it, tabLevel + 2);
 			}
 		}
 	}
@@ -693,15 +738,15 @@ string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector
 		output += outputText("r", "--None--", false, tabLevel + 2);
 	}else{
 		for (vector<string>::iterator it = fileList.begin(); it != fileList.end(); ++it) {
-			if (find(ignoreList->begin(), ignoreList->end(), syncFolderLoc + foldSeparater + *it) != ignoreList->end()) {
+			if (find(ignoreList->begin(), ignoreList->end(), levels + foldSeparater + *it) != ignoreList->end()) {
 				output += outputText("r", "Skipping (in ignore or get list) \"" + levels + foldSeparater + *it + "\".", false, tabLevel + 2);
 			} else {
 				//move file
-				output += outputText("r", "Moving \"" + levels + foldSeparater + *it + "\"...", false, tabLevel + 2);
-				output += copyFile(syncFolderLoc + foldSeparater + *it, storFolderLoc, tabLevel + 3);
+				output += outputText("r", "Moving \"" +  levels + foldSeparater + *it + "\"...", false, tabLevel + 2);
+				output += copyFile(syncFolderLoc + levels + foldSeparater + *it, storFolderLoc + foldSeparater + levels, tabLevel + 3);
 				output += outputText("r", "Done.", false, tabLevel + 2);
 				//remove file
-				remove((syncFolderLoc + foldSeparater + *it).c_str());
+				remove((syncFolderLoc + levels + foldSeparater + *it).c_str());
 			}
 		}
 	}
@@ -797,10 +842,10 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	vector<string> getList;
 	vector<string> ignoreList;
 	//add the defaults to ignore list.
-	ignoreList.push_back(syncConfigLoc);
-	ignoreList.push_back(syncFileListLoc);
-	ignoreList.push_back(syncRetrieveListLoc);
-	ignoreList.push_back(syncIgnoreListLoc);
+	ignoreList.push_back(thisFoldSeparater + configFileName);
+	ignoreList.push_back(thisFoldSeparater + syncFileListName);
+	ignoreList.push_back(thisFoldSeparater + getListFileName);
+	ignoreList.push_back(thisFoldSeparater + ignoreListFileName);
 
 	//process config folder
 	output += ensureFolderConfig(syncConfigLoc);
@@ -817,13 +862,22 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 		output += outputText("r", "--None--", false, tabLevel + 2);
 	}else{
 		for (vector<string>::iterator it = getList.begin(); it != getList.end(); ++it) {
-			output += outputText("r", *it, false, tabLevel + 2);
+			output += outputText("r", "\"" + *it + "\"", false, tabLevel + 2);
 		}
 	}
 	output += outputText("r", "End List.", false, tabLevel + 1);
 
 	//add items in get list to ignore list
 	ignoreList.insert(ignoreList.end(), getList.begin(), getList.end());
+	output += outputText("r", "Ignoring the following files in the sync folder:", false, tabLevel + 1);
+	if(ignoreList.size() == 0){
+		output += outputText("r", "--None--", false, tabLevel + 2);
+	}else{
+		for (vector<string>::iterator it = ignoreList.begin(); it != ignoreList.end(); ++it) {
+			output += outputText("r", "\"" + *it + "\"", false, tabLevel + 2);
+		}
+	}
+	output += outputText("r", "End List.", false, tabLevel + 1);
 
 	//ensure storage folder present
 	output += ensureStorageDir(storeDirLoc, tabLevel + 1);
@@ -845,6 +899,12 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 
 	//refresh storage file list
 	output += refreshFileList(syncFileListLoc, storeDirLoc);
+
+	//delete empty folders
+	output += outputText("r", "Removing empty sub folders in storage...", verbosity, tabLevel + 1);
+	removeEmptySubfolders(storeDirLoc);
+	output += outputText("r", "Done", verbosity, tabLevel + 1);
+
 
 	return output + outputText("r", "Completed processing sync directory: " + syncDirLoc, verbosity, tabLevel);
 }
