@@ -38,7 +38,7 @@ using namespace std;
 /**************
 **	Globals  **
 **************/
-const string version = "A1.0.1";//version number
+const string version = "A1.0.2";//version number
 const char delimeter = ';';//the delimiter to use betwen key/values for config files
 string logFileLoc = "DBSS_LOG.txt";//the log file
 string confFileLoc = "DBSS_CONF.txt";//the config file
@@ -298,7 +298,7 @@ string copyFile(string fromPath, string toDir, int tabLevel = 3) {
 	//TODO:: check if file already present where copying; remove it first if there?
 
 	// check/wait for file to be done transferring
-	output += outputText("r", "Checking for complete transfer of file...", false, tabLevel + 1);
+	output += outputText("r", "Checking that file is not being transferred by another process...", false, tabLevel + 1);
 	long initSize, tempSize;
 	do {
 		initSize = getFileSize(fromPath);
@@ -709,21 +709,21 @@ string getListOfFilesToIgnore(string syncIgnoreListLoc, vector<string>* toIgnore
 }//getListOfFilesToIgnore(string, vector<string>*, int)
 
 /**
-	Moves the contents of a sync folder into a storage folder.
+	Moves the contents of a folder into another storage folder.
 
-	@param syncFolderLoc The location of the sync folder to move things from.
-	@param storFolderLoc The location of the storage folder to move things to.
+	@param fromFolderLoc The location of the folder to move things from.
+	@param toFolderLoc The location of the folder to move things to.
 	@param ignoreList The pointer of the list of files to ignore.
 	@param levels The levels to prepend to outputs. (keep as empty string for first call)
 	@param tabLevel The number of tabs put in front of output lines.
 */
-string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector<string>* ignoreList, string levels = "", int tabLevel = 1) {
+string moveFolderContents(string fromFolderLoc, string toFolderLoc, vector<string>* ignoreList, string levels = "", int tabLevel = 1) {
 	string output = outputText("r", "Moving files and folders in \"" + syncFolderLoc + levels + "\" to \"" + storFolderLoc + levels + "\"...", false, tabLevel);
 
 	//get directory and file list
 	vector<string> dirList;
 	vector<string> fileList;
-	getItemsInDir(syncFolderLoc + levels, &fileList, &dirList);
+	getItemsInDir(fromFolderLoc + levels, &fileList, &dirList);
 
 	//process directories recursively
 	unsigned long numDir = dirList.size();
@@ -735,7 +735,7 @@ string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector
 			if (find(ignoreList->begin(), ignoreList->end(), levels + foldSeparater + *it) != ignoreList->end()) {
 				output += outputText("r", "Skipping (in ignore or get list) \"" + levels + foldSeparater + *it + "\".", false, tabLevel + 2);
 			}else{
-				output += moveSyncFolderContents(syncFolderLoc, storFolderLoc, ignoreList, levels + foldSeparater + *it, tabLevel + 2);
+				output += moveFolderContents(fromFolderLoc, toFolderLoc, ignoreList, levels + foldSeparater + *it, tabLevel + 2);
 			}
 		}
 	}
@@ -753,94 +753,62 @@ string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector
 			} else {
 				//move file
 				output += outputText("r", "Moving \"" +  levels + foldSeparater + *it + "\"...", false, tabLevel + 2);
-				output += copyFile(syncFolderLoc + levels + foldSeparater + *it, storFolderLoc + foldSeparater + levels, tabLevel + 3);
+				output += copyFile(fromFolderLoc + levels + foldSeparater + *it, toFolderLoc + levels, tabLevel + 3);
 				output += outputText("r", "Done.", false, tabLevel + 2);
 				//remove file
-				remove((syncFolderLoc + levels + foldSeparater + *it).c_str());
+				remove((fromFolderLoc + levels + foldSeparater + *it).c_str());
 			}
 		}
 	}
 	output += outputText("r", "Done.", false, tabLevel + 1);
 
-	//remove sync folder for this iteration
-	if (dirIsEmpty(syncFolderLoc)) {
-		removeDirectory(syncFolderLoc);
-	}
-
 	return output + outputText("r", "Done.", false, tabLevel);
-}//moveSyncFolderContents(string, string, vector<string>*, string, int)
+}//moveFolderContents(string, string, vector<string>*, string, int)
 
 /**
 	Moves files back from the storage folder.
-	TODO:: account for whole folders
-	TODO:: change to not have to go through each file (just go through each in get list)
 
 	@param storFolderLoc The location of the storage folder.
 	@param syncFolderLoc The location of the syncing folder.
 	@param getList The vector list of files to get.
-	@param levels Used for the recursive searching of folders. Always call as "".
 	@param tabLevel The number of tabs put in front of output lines.
  */
-string moveFilesToGet(string storFolderLoc, string syncFolderLoc, vector<string>* getList, string levels = "", int tabLevel = 1) {
+string moveFilesToGet(string storFolderLoc, string syncFolderLoc, vector<string>* getList, int tabLevel = 1) {
 	string output = outputText("r", "Moving files and folders to get in \"" + storFolderLoc + "\" to \"" + syncFolderLoc + "\"...", false, tabLevel);
-	//ensure storage folder location
-	ensureStorageDir(storFolderLoc, tabLevel + 1);
-
-	vector<string> foldsSearched;
-	vector<string> tempGetList = *getList;
-
-	//get directory and file list
-	vector<string> dirList;
-	vector<string> fileList;
-	getItemsInDir(storFolderLoc, &fileList, &dirList);
-
-	//process directories recursively
-	unsigned long numDir = dirList.size();
-	output += outputText("r", "Processing sub folders (" + to_string(numDir) + ")...", false, tabLevel + 1);
-	if(dirList.size() == 0){
-		output += outputText("r", "--None--", false, tabLevel + 2);
+	if(getList->size() == 0){
+		output += outputText("r", "--No files to move--", false, tabLevel + 2);
 	}else{
-		for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
-			output += moveFilesToGet(storFolderLoc + foldSeparater + *it, syncFolderLoc + foldSeparater + *it, getList, levels + foldSeparater + *it, tabLevel + 2);
-		}
-	}
-	output += outputText("r", "Done.", false, tabLevel + 1);
+		//iterate through each in get list, moving it if need be.
+		for (vector<string>::iterator it = getList->begin(); it != getList->end(); ++it) {
+			//setup file locations for operation
+			string storFileLoc = storFolderLoc + *it;
+			string syncFileLoc = syncFolderLoc + *it;
+			string syncFileDirLoc = syncFileLoc.substr(0, syncFileLoc.size() - getLastPartOfPath(*it).size());
 
-	//process files
-	unsigned long numFiles = fileList.size();
-	output += outputText("r", "Transferring files (" + to_string(numFiles) + ")...", false, tabLevel + 1);
-	if(fileList.size() == 0){
-		output += outputText("r", "--None--", false, tabLevel + 2);
-	}else{
-		for (vector<string>::iterator it = fileList.begin(); it != fileList.end(); ++it) {
-			if (find(getList->begin(), getList->end(), levels + foldSeparater + *it) != getList->end()) {
-				//if(!checkFilePath()){}
-				//move file
-				output += outputText("r", "Moving \"" + levels + foldSeparater + *it + "\"...", false, tabLevel + 2);
-				output += copyFile(storFolderLoc + foldSeparater + *it, syncFolderLoc, tabLevel + 3);
-				output += outputText("r", "Done.", false, tabLevel + 2);
-				//remove file
-				remove((storFolderLoc + foldSeparater + *it).c_str());
-			} else {
-				output += outputText("r", "Skipping (not in get list) \"" + levels + foldSeparater + *it + "\".", false, tabLevel + 2);
+			//see if it is in storage
+			if(checkFilePath(storFileLoc, true)){//folder
+				vector<string> emptyVect;
+				output += outputText("r", "Moving all files and folders in \"" + storFileLoc + "\"...", false, tabLevel + 1);
+				output += moveFolderContents(storFileLoc, syncFileLoc, &emptyVect, "", tabLevel + 2);
+				output += outputText("r", "Done.", false, tabLevel + 1);
+			}else if(checkFilePath(storFileLoc, false)){//file
+				//move the file to storage.
+				output += outputText("r", "Moving \"" + storFileLoc + "\"...", false, tabLevel + 1);
+				output += copyFile(storFileLoc, syncFileDirLoc, tabLevel + 2);
+				remove(storFileLoc.c_str());
+				output += outputText("r", "Done.", false, tabLevel + 1);
+			}else if(checkFilePath(syncFileLoc, false)){//check if not already in sync
+				output += outputText("r", "Already moved: \"" + *it + "\"", false, tabLevel + 1);
+			}else{
+				output += outputText("r", "WARNING:::: Appears that \"" + *it + "\" is in neither the storage or sync directories.", false, tabLevel + 1);
 			}
-		}
-	}
-	output += outputText("r", "Done.", false, tabLevel + 1);
-
-	//remove sync folder for this iteration
-	if (dirIsEmpty(syncFolderLoc)) {
-		removeDirectory(syncFolderLoc);
-	}
-
+		}//foreach of the files to get
+	}//if there are files to get
 	return output + outputText("r", "Done.", false, tabLevel);
-}//moveFilesToGet(string, string, vector<string>*, string, int)
+}//moveFilesToGet(string, string, vector<string>*, int)
 
 // TODO::
-	// delete empty folders in storage
-	// handle deleting files better?
 	// status file?
-	//handle replacing stored dir/files with new incoming ones
 /**
 	Processes an entire sync folder to move things accordingly.
 	TODO:: doc
@@ -909,10 +877,10 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	}
 
 	//for each file in sync folder (not in ignore list), move it into the storage folder, removing it from the sync folder
-	output += moveSyncFolderContents(syncDirLoc, storeDirLoc, &ignoreList, "", tabLevel + 1);
+	output += moveFolderContents(syncDirLoc, storeDirLoc, &ignoreList, "", tabLevel + 1);
 
 	//if not already moved to sync, move files in retrieveList to sync. remove them from storage
-	output += moveFilesToGet(storeDirLoc, syncDirLoc, &getList, "", tabLevel + 1);
+	output += moveFilesToGet(storeDirLoc, syncDirLoc, &getList, tabLevel + 1);
 
 	//crop the number of files in storage
 	output += cropNumInStor(storeDirLoc, thisNumBackupsToKeep);
@@ -926,7 +894,7 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	output += outputText("r", "Done", verbosity, tabLevel + 1);
 
 	return output + outputText("r", "Completed processing sync directory: " + syncDirLoc, verbosity, tabLevel);
-}
+}// processSyncDir(string, string, int, bool, string, string, string, string, int, string, string)
 
 /**
 	Searches the sync folder for folders to be searched.
@@ -948,10 +916,8 @@ void searchSyncDir() {
 			string curSyncFolder = syncFolderLoc + foldSeparater + *it;
 			string curStorFolder = storFolderLoc + foldSeparater + *it;
 			if (checkFilePath(curSyncFolder, true)) {
-				//outputText("cl", "Processing sync folder \"" + curSyncFolder + "\"...", verbose, 2);
 				//TODO:: do this with thread pooling
 				outputText("cl", "Finished processing folder. Output:" + nlc + nlc + processSyncDir(curSyncFolder, curStorFolder) + "End of output." + nlc, verbose, 1);
-				//cropNumInStor(curSyncFolder, searchInnerSyncDir(curSyncFolder));
 			}
 		}
 	}else{
