@@ -4,6 +4,9 @@
 	Copyright 2016 Epic Breakfast Productions
 
 	Author: Greg Stewart
+
+	Notes:
+		Using C++ standard 2011 (c++11x or c++0x)
 */
 
 ///////////////
@@ -11,23 +14,18 @@
 ///////////////
 
 //includes TODO:: check for redundant includes
-#include <cstdlib>
-#include <stdlib.h>
-
+#include <stdlib.h>//for many things
+#include <vector>//for lists of things
+#include <string.h>//for strings
+#include <sstream>//for string stream on the outputs
 #include <iostream>//to do console stuff
 #include <fstream>//to do file stuff
-#include <stdio.h>//file stuff?
-#include <sstream>//for string stream on the outputs
-
 #include <time.h>//for time measurement
 #include <algorithm>//for finding element in vector
-#include <string>//for strings
-#include <string.h>//for strings
 #include <sys/stat.h>//for checking filepaths
-#include <vector>//for lists of things
 #include <dirent.h>//for looking at contents of directory
 
-//sleep stuff/ other sys dependent stuff
+//sys dependent stuff
 #ifdef __linux__
 #include <unistd.h>//sleep, rm dir
 #endif
@@ -108,7 +106,7 @@ void mySleepMs(int sleepMs) {
 #ifdef _WIN32
 	Sleep(sleepMs);
 #endif
-}
+}//mySleepMs(int)
 
 /**
 	Sleeps for a specified amount of seconds.
@@ -117,7 +115,7 @@ void mySleepMs(int sleepMs) {
  */
 void mySleep(int sleepS){
 	mySleepMs(sleepS * 1000);
-}
+}//mySleep(int)
 
 /**
 	Checks if the file path given is present.
@@ -165,7 +163,7 @@ string getTimestamp(){
 	timeinfo = localtime (&rawtime);
 	strftime (buffer,80,"%F %I:%M:%S %p",timeinfo);
 	return (string)buffer;
-}//getTimestamp
+}//getTimestamp()
 
 /**
 	Gets a certain number of tabs.
@@ -177,7 +175,7 @@ string getTabs(int numTabs = 1) {
 		tabs += "\t";
 	}
 	return tabs;
-}
+}//getTabs(int)
 
 /**
 	How one should output text in this program.
@@ -207,13 +205,14 @@ string outputText(string types, string message, bool verbosity = true, int tabLe
 		return outputText;
 	}
 	return "";
-}//outputText
+}//outputText(string, string, bool, int)
 
 /**
- * Gets the folder separater character in a url.
- * Returns '\0' on not finding a folder separater.
- * @param url The url to get the folder separating character from.
- * @return The folder separator character.
+	Gets the folder separater character in a url.
+	Returns '\0' on not finding a folder separater.
+
+	@param url The url to get the folder separating character from.
+	@return The folder separator character.
  */
 char getSeparater(string url){
 	size_t found = url.find("/");
@@ -225,7 +224,7 @@ char getSeparater(string url){
 		return '\\';
 	}
 	return '\0';
-}
+}//getSeparater(string)
 
 /**
 	Creates a directory.
@@ -247,7 +246,7 @@ void createDirectory(string directoryLocation){
 		//run for the deepest dir again
 		createDirectory(directoryLocation);
 	}
-}
+}//createDirectory(string)
 
 void removeDirectory(string dirLocation) {
 #ifdef __linux__
@@ -256,7 +255,7 @@ void removeDirectory(string dirLocation) {
 #ifdef _WIN32
 	RemoveDirectory(dirLocation.c_str());
 #endif
-}
+}//removeDirectory(string)
 
 /**
 	Gets the last file or folder in a given file path.
@@ -265,7 +264,7 @@ void removeDirectory(string dirLocation) {
 */
 string getLastPartOfPath(string path) {
 	return path.substr(path.find_last_of(foldSeparater) + 1);
-}
+}//getLastPartOfPath(string)
 
 /**
 	Gets the size of the file.
@@ -277,7 +276,7 @@ long getFileSize(string file) {
 	struct stat filestatus;
 	stat(file.c_str(), &filestatus);
 	return filestatus.st_size;
-}
+}//getFileSize(string)
 
 /**
 	Copies a file from a path into the given directory. Creates the destination directory if it is not present.
@@ -324,9 +323,7 @@ string copyFile(string fromPath, string toDir, int tabLevel = 3) {
 		output += outputText("r", "ERROR:: file NOT copied. Destination file not present after copy attempt.", false, tabLevel + 1);
 	}
 	return output + outputText("r", "Done.", false, tabLevel);
-}
-
-
+}//copyFile(string, string, int)
 
 /////////////////
 #pragma endregion workers
@@ -367,7 +364,7 @@ void getItemsInDir(string dirLoc, vector<string>* itemList, bool wholePath = fal
 		cout << "ERROR:::::: Could not open directory (" << dirLoc << ")for inspection." << endl;
 	}
 	return;
-}
+}//getItemsInDir(string, vector<string>*, bool)
 
 /**
 	Gets the items in a given directory, separating the sub directories and files into two lists.
@@ -392,12 +389,14 @@ void getItemsInDir(string dirLoc, vector<string>* fileList, vector<string>* dirL
 			fileList->push_back(*it);
 		}
 	}//foreach item in dir
-}
+}//getItemsInDir(string, vector<string>*, vector<string>*, bool)
 
 /**
 	Gets the directories in a given directory.
 
-	TODO:: doc
+	@param dirLoc The location of the directory we are getting the items for.
+	@param dirList The vector to push all the subdirectories into.
+	@param wholePath Optional param to add the whole path to the files & folders.
  */
 void getDirsInDir(string dirLoc, vector<string>* dirList, bool wholePath = false) {
 	//cout << "Getting items in \"" << dirLoc << "\":";
@@ -408,7 +407,7 @@ void getDirsInDir(string dirLoc, vector<string>* dirList, bool wholePath = false
 			dirList->push_back(*it);
 		}
 	}//foreach item in dir
-}
+}//getDirsInDir(string, vector<string>*, bool)
 
 /**
 	Determines if the given directory is empty.
@@ -419,16 +418,16 @@ bool dirIsEmpty(string dirLoc) {
 	vector<string> itemList;
 	getItemsInDir(dirLoc, &itemList);
 	return itemList.size() == 0;
-}
+}//dirIsEmpty(string)
 
 /**
-Determines if the givben directory is not empty.
+	Determines if the givben directory is not empty.
 
-@param dirLoc The location of the directory to test for emptiness.
+	@param dirLoc The location of the directory to test for emptiness.
 */
 bool dirIsNotEmpty(string dirLoc) {
 	return !dirIsEmpty(dirLoc);
-}
+}//dirIsNotEmpty(string)
 
 /**
 	Generalized function for getting a list of files from a file.
@@ -448,13 +447,13 @@ void readFileList(string fileListLoc, vector<string>* fileList){
 		}
 	}
 	fileListFile.close();
-}
+}//readFileList(string, vector<string>*)
 
 /**
 	Removes any empty sub directories in the given directory.
 	Recursively checks all sub folders
 
-	TODO:: doc
+	@param parentDir The parent directory of the subfolders you want to remove.
  */
 void removeEmptySubfolders(string parentDir){
 	vector<string> subDirs;
@@ -467,7 +466,7 @@ void removeEmptySubfolders(string parentDir){
 			removeDirectory(curDir);
 		}
 	}
-}
+}//removeEmptySubfolders(string)
 
 
 /////////////////
@@ -483,10 +482,10 @@ void removeEmptySubfolders(string parentDir){
 ///////////////
 
 /**
-Generates the folder config for a sync folder.
+	Generates the folder config for a sync folder.
 
-@param configLoc The location of the config file to create.
-@param tabLevel The number of tabs put in front of output lines.
+	@param configLoc The location of the config file to create.
+	@param tabLevel The number of tabs put in front of output lines.
 */
 string generateFolderConfig(string configLoc, int tabLevel = 2) {
 	string output = outputText("r", "Generating folder configuration...", false, tabLevel);
@@ -499,13 +498,13 @@ string generateFolderConfig(string configLoc, int tabLevel = 2) {
 	confFile << "numBackupsToKeep" << delimeter << "5";
 	confFile.close();
 	return output + outputText("r", "Done.", false, tabLevel);;
-}
+}//generateFolderConfig(string, int)
 
 /**
-Ensures the sync folder's config is present. Creates it if it is not there.
+	Ensures the sync folder's config is present. Creates it if it is not there.
 
-@param configLoc The location of the config file to create.
-@param tabLevel The number of tabs put in front of output lines.
+	@param configLoc The location of the config file to create.
+	@param tabLevel The number of tabs put in front of output lines.
 */
 string ensureFolderConfig(string configLoc, int tabLevel = 1) {
 	string output = outputText("r", "Ensuring folder config is present...", false, tabLevel);
@@ -516,15 +515,15 @@ string ensureFolderConfig(string configLoc, int tabLevel = 1) {
 		output += outputText("r", "Folder config is present!", false, tabLevel + 1);
 	}
 	return output + outputText("r", "Done.", false, tabLevel);
-}
+}//ensureFolderConfig(string, int)
 
 /**
-Reads the folder config into the globals.
+	Reads the folder config into the globals.
 
-@param configLoc The location of the config file to read from.
-@param backupsToKeep The pointer to the integer to keep track of the number of backups to keep.
-@param thisDelimeter The delimeter to go between the key/value pairs in the config file.
-@param tabLevel The number of tabs put in front of output lines.
+	@param configLoc The location of the config file to read from.
+	@param backupsToKeep The pointer to the integer to keep track of the number of backups to keep.
+	@param thisDelimeter The delimeter to go between the key/value pairs in the config file.
+	@param tabLevel The number of tabs put in front of output lines.
 */
 string readFolderConfig(string configLoc, int* backupsToKeep, string thisDelimeter = delimeter + "", int tabLevel = 1) {
 	string output = outputText("r", "Reading configuration file...", false, tabLevel);
@@ -543,7 +542,7 @@ string readFolderConfig(string configLoc, int* backupsToKeep, string thisDelimet
 	}
 	confFile.close();
 	return output + outputText("r", "Done.", false, tabLevel);
-}
+}//readFolderConfig(string, int*, string, int)
 
 /**
 	Ensures that the storage directory is present.
@@ -565,7 +564,7 @@ string ensureStorageDir(string storageDirLoc, int tabLevel = 1) {
 		}
 	}
 	return output;
-}
+}//ensureStorageDir(string, int)
 
 /**
 Crops the number of files in storage to the number set by the config.
@@ -581,7 +580,7 @@ string cropNumInStor(string storDir, int numToKeep, int tabLevel = 1) {
 	string output = outputText("r", "Cropping number of files in the storage folder...", false, tabLevel);
 
 	//TODO:: crop number of items in folder to the number given
-}
+}//cropNumInStor(string, int, int)
 
 /**
 	Refreshes the file list in the sync folder.
@@ -611,7 +610,7 @@ string refreshFileList(ofstream& fileListFile, string storeDir, string levels = 
 		fileListFile << levels << *it << endl;
 	}
 	return output + outputText("r", "Done.", false, tabLevel);
-}
+}//refreshFileList(ofstream&, string, string, int)
 
 /**
 	Refreshes the file list with the items in the storage directory.
@@ -630,12 +629,13 @@ string refreshFileList(string fileListLoc, string storeDir, int tabLevel = 1) {
 	output += refreshFileList(fileListFile, storeDir, foldSeparater, tabLevel + 1);
 	fileListFile.close();
 	return output + outputText("r", "Done.", false, tabLevel);
-}
+}//refreshFileList(string, string, int)
 
 /**
-	Ensures the list of files to get is preset.
+	Ensures the list of files to get is present.
 
-	TODO:: doc
+	@param getListLoc The location of the list of files to get.
+	@param tabLevel The number of tabs put in front of output lines.
 */
 string ensureGetList(string getListLoc, int tabLevel = 1) {
 	string output = outputText("r", "Ensuring get list is present...", false, tabLevel);
@@ -653,7 +653,7 @@ string ensureGetList(string getListLoc, int tabLevel = 1) {
 		output += outputText("r", "Get list is present!", false, tabLevel + 1);
 	}
 	return output + outputText("r", "Done.", false, tabLevel);
-}
+}//ensureGetList(string, int)
 
 /**
 	Gets a list of files to retrieve and put into the sync folder, and clear the get list as it goes.
@@ -667,8 +667,14 @@ string getListOfFilesToGet(string syncRetrieveListLoc, vector<string>* toGetList
 	output += ensureGetList(syncRetrieveListLoc, tabLevel + 1);
 	readFileList(syncRetrieveListLoc, toGetList);
 	return output + outputText("r", "Done.", false, tabLevel);
-}
+}//getListOfFilesToGet(string, vector<string>*, int)
 
+/**
+	Ensures the list of files to ignore is present.
+
+	@param ignoreListLoc The location of the ignore list file.
+	@param tabLevel The number of tabs put in front of output lines.
+ */
 string ensureIgnoreList(string ignoreListLoc, int tabLevel = 1) {
 	string output = outputText("r", "Ensuring ignore list is present...", false, tabLevel);
 	if(!checkFilePath(ignoreListLoc, false)){
@@ -686,17 +692,21 @@ string ensureIgnoreList(string ignoreListLoc, int tabLevel = 1) {
 		output += outputText("r", "Get list is present!", false, tabLevel + 1);
 	}
 	return output + outputText("r", "Done.", false, tabLevel);
-}
+}//ensureIgnoreList(string, int)
 
 /**
-	TODO:: doc
+	Gets the list of files to ignore from the file.
+
+	@param syncIgnoreListLoc The location of the ignore list file.
+	@param toIgnoreList The vector we are putting th items to ignore into.
+	@param tabLevel The number of tabs put in front of output lines.
  */
 string getListOfFilesToIgnore(string syncIgnoreListLoc, vector<string>* toIgnoreList, int tabLevel = 1) {
 	string output = outputText("r", "Getting list of files to ignore in sync folder...", false, tabLevel);
 	output += ensureGetList(syncIgnoreListLoc, tabLevel + 1);
 	readFileList(syncIgnoreListLoc, toIgnoreList);
 	return output + outputText("r", "Done.", false, tabLevel);
-}
+}//getListOfFilesToIgnore(string, vector<string>*, int)
 
 /**
 	Moves the contents of a sync folder into a storage folder.
@@ -758,11 +768,18 @@ string moveSyncFolderContents(string syncFolderLoc, string storFolderLoc, vector
 	}
 
 	return output + outputText("r", "Done.", false, tabLevel);
-}
+}//moveSyncFolderContents(string, string, vector<string>*, string, int)
 
 /**
-	TODO:: doc
+	Moves files back from the storage folder.
 	TODO:: account for whole folders
+	TODO:: change to not have to go through each file (just go through each in get list)
+
+	@param storFolderLoc The location of the storage folder.
+	@param syncFolderLoc The location of the syncing folder.
+	@param getList The vector list of files to get.
+	@param levels Used for the recursive searching of folders. Always call as "".
+	@param tabLevel The number of tabs put in front of output lines.
  */
 string moveFilesToGet(string storFolderLoc, string syncFolderLoc, vector<string>* getList, string levels = "", int tabLevel = 1) {
 	string output = outputText("r", "Moving files and folders to get in \"" + storFolderLoc + "\" to \"" + syncFolderLoc + "\"...", false, tabLevel);
@@ -817,20 +834,23 @@ string moveFilesToGet(string storFolderLoc, string syncFolderLoc, vector<string>
 	}
 
 	return output + outputText("r", "Done.", false, tabLevel);
-}
+}//moveFilesToGet(string, string, vector<string>*, string, int)
 
 // TODO::
 	// delete empty folders in storage
 	// handle deleting files better?
 	// status file?
 	//handle replacing stored dir/files with new incoming ones
+/**
+	Processes an entire sync folder to move things accordingly.
+	TODO:: doc
+ */
 string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, bool verbosity = verbose, string configFileName = clientConfigFileName, string syncFileListName = clientSyncFileListName, string getListFileName = clientSyncGetFileListName, string ignoreListFileName = clientSyncIgnoreFileListName, int thisNumBackupsToKeep = numBackupsToKeepDef, string thisFoldSeparater = foldSeparater, string thisnlc = nlc) {
 	string output = outputText("r", "Processing folder:\"" + syncDirLoc + "\"...", false, tabLevel);
 	output += outputText("r", "Storage directory: \"" + storeDirLoc + "\"", false, tabLevel + 1);
 
 	//config values
 	int numToKeep = thisNumBackupsToKeep;
-
 
 	//config and other list locations
 	string syncConfigLoc = syncDirLoc + thisFoldSeparater + configFileName;
@@ -905,12 +925,13 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	removeEmptySubfolders(storeDirLoc);
 	output += outputText("r", "Done", verbosity, tabLevel + 1);
 
-
 	return output + outputText("r", "Completed processing sync directory: " + syncDirLoc, verbosity, tabLevel);
 }
 
 /**
 	Searches the sync folder for folders to be searched.
+
+	Uses processSyncDir() on each folder found in the sync parent dir.
 */
 void searchSyncDir() {
 	outputText("cl", "Begin processing of folders in sync folder directory...", verbose, 0);
@@ -937,7 +958,7 @@ void searchSyncDir() {
 		outputText("cl", "---- No sync folders present in sync folder directory. ----", verbose, 1);
 	}
 	outputText("cl", "Done processing folders in sync folder directory.", verbose, 0);
-}//searchSyncDir
+}//searchSyncDir()
 
  /////////////////
 #pragma endregion SyncFolderOps
@@ -954,7 +975,7 @@ void searchSyncDir() {
 bool setRunOnStart() {
 	outputText("c", "Setting to run the server on start.", verbose);
 	//ofstream log (logFile.c_str(), ios::out | ios::app);
-	//TODO:: this
+	//TODO:: this for both windows and linux
 }//setRunOnStart()
 
 /////////////////
@@ -1016,7 +1037,7 @@ void runServer() {
 		outputText("cl", "Something went wrong. Exiting execution of server.", verbose, 0);
 	}
 	outputText("cl", "######## END SERVER RUN ########", verbose);
-}//runServer
+}//runServer()
 
 /**
 	Generates the default main configuration file at the current working directory of the executable (where it will look for it)
@@ -1075,29 +1096,8 @@ void readMainConfig() {
 
 
 /////////////////
-#pragma endregion
+#pragma endregion MainServerOps
 /////////////////
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1110,10 +1110,7 @@ void test(){
 	cout << "test" << endl;
 	createDirectory("test1");
 	createDirectory("test2/test3");
-}
-
-
-
+}//test()
 
 /**
  * Standard main function. Use "-h" argument for help on how to run.
@@ -1216,6 +1213,5 @@ int main(int argc, char *argv[]){
 		outputText("c", "Not told to do anything. Use -h to see options.", verbose);
 	}
 
-
 	return 0;
-}//main
+}//main()

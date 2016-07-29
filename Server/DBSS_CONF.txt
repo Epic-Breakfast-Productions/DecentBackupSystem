@@ -1,6 +1,0 @@
-logFileLoc;DBSS_LOG.txt
-syncFolderPred;DBSS_sync_
-syncFolderLoc;DBSS_sync_dir
-storFolderPred;DBSS_stor_
-storFolderLoc;DBSS_stor_dir
-checkInterval;60
