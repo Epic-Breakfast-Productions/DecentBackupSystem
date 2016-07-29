@@ -13,7 +13,7 @@
 #pragma region include_globals - Includes and global variables.
 ///////////////
 
-//includes TODO:: check for redundant includes
+//includes
 #include <stdlib.h>//for many things
 #include <vector>//for lists of things
 #include <string.h>//for strings
@@ -24,7 +24,6 @@
 #include <algorithm>//for finding element in vector
 #include <sys/stat.h>//for checking filepaths
 #include <dirent.h>//for looking at contents of directory
-
 //sys dependent stuff
 #ifdef __linux__
 #include <unistd.h>//sleep, rm dir
@@ -39,8 +38,8 @@ using namespace std;
 /**************
 **	Globals  **
 **************/
-const char delimeter = ';';
-const string version = "0.0.1";//version number
+const string version = "A1.0.1";//version number
+const char delimeter = ';';//the delimiter to use betwen key/values for config files
 string logFileLoc = "DBSS_LOG.txt";//the log file
 string confFileLoc = "DBSS_CONF.txt";//the config file
 
@@ -50,6 +49,7 @@ string storFolderPred = "DBSS_stor_";// the filename predicate for storage folde
 string syncFolderLoc = syncFolderPred + "dir";
 string storFolderLoc = storFolderPred + "dir";
 
+//sync folder files
 const string clientConfigFileName = "DBSS_CLIENT_CONF.txt";
 const string clientSyncFileListName = "DBSS_STORED_FILES.txt";
 const string clientSyncGetFileListName = "DBSS_TO_GET_LIST.txt";
@@ -1158,6 +1158,7 @@ int main(int argc, char *argv[]){
 	}
 	//cout << "Done." << endl;
 	~curArg;
+
 
 	if(runTest){
 		test();
