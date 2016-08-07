@@ -454,12 +454,12 @@ Accepts a '#' as a comment, and ignores the line.
 @param delim Optional param for setting the delimeter used in the file.
  */
 void readDataPairs(string dataPairLoc, map<string, string>* dataPairs, string delim = delimeter){
-	ifstream fileListFile(fileListLoc.c_str());
-	string curLine, key, data;;
+	ifstream fileListFile(dataPairLoc.c_str());
+	string curLine, key, data;
 	while (fileListFile.good()) {
-		getline(confFile, key, delim.c_str()[0]);
+		getline(fileListFile, key, delim.c_str()[0]);
 		if (key != "" && key.at(0) != '#') {
-			getline(confFile, data, nlc);
+			getline(fileListFile, data, nlc.c_str()[0]);
 			dataPairs->insert(make_pair(key, data));
 		}
 	}
@@ -476,7 +476,7 @@ Writes out of key/value pairs to the given file location.
  */
 void writeDataPairs(string dataPairLoc, map<string, string>* dataPairs, map<int, string>* comments, string delim = delimeter){
 	unsigned long long int lineCount = 1;
-	ofstream outFile(configLoc.c_str());
+	ofstream outFile(dataPairLoc.c_str());
 	if (!outFile.good()) {
 		return;
 	}
