@@ -320,6 +320,37 @@ string copyFile(string fromPath, string toDir, int tabLevel = 3) {
 	return output + outputText("r", "Done.", false, tabLevel);
 }//copyFile(string, string, int)
 
+/**
+Gets the index of the pair with the given key in the vector.
+
+Returns -1 on not finding the key.
+
+@param vectArr The array of pairs we are searching.
+@param var The value of the key we are searching for.
+@return The index of the pair with the given key in the vector. -1 if key not found.
+ */
+int getIndOfKey(vector< pair<string, string> >* vectArr, string var){
+	int i = 0;
+	for (const auto& pair : *vectArr) {
+		if(pair.first == var){
+			return i;
+		}
+		i++;
+	}
+	return -1;
+}//getIndOfKey(vector< pair<string, string> >*, string)
+
+/**
+Determines if the vector array has a pair with the given key.
+
+@param vectArr The array of pairs we are searching.
+@param var The value of the key we are searching for.
+@return The index of the pair with the given key in the vector was found.
+ */
+bool hasVar(vector< pair<string, string> >* vectArr, string var){
+	return (getIndOfKey(vectArr, var) > -1);
+}
+
 /////////////////
 #pragma endregion workers
 /////////////////
@@ -453,14 +484,19 @@ Accepts a '#' as a comment, and ignores the line.
 @param dataPairs The map we are placing the pairs into.
 @param delim Optional param for setting the delimeter used in the file.
  */
-void readDataPairs(string dataPairLoc, map<string, string>* dataPairs, string delim = delimeter){
+void readDataPairs(string dataPairLoc, vector< pair<string, string> >* dataPairs, char delim = delimeter){
 	ifstream fileListFile(dataPairLoc.c_str());
 	string curLine, key, data;
 	while (fileListFile.good()) {
-		getline(fileListFile, key, delim.c_str()[0]);
+		getline(fileListFile, key, delim);
 		if (key != "" && key.at(0) != '#') {
 			getline(fileListFile, data, nlc.c_str()[0]);
-			dataPairs->insert(make_pair(key, data));
+			if(hasVar(dataPairs, key)){
+				dataPairs->at(getIndOfKey(dataPairs, key)) = make_pair(key, data);
+			}else{
+				//todo::this actually work?
+				dataPairs->push_back({key, data});
+			}
 		}
 	}
 	fileListFile.close();
@@ -474,22 +510,23 @@ Writes out of key/value pairs to the given file location.
 @param comments Comments to write out. Key is the line to put the comment (value) at.
 @param delim Optional. The delimeter to use between the key/value pairs.
  */
-void writeDataPairs(string dataPairLoc, map<string, string>* dataPairs, map<int, string>* comments, string delim = delimeter){
+void writeDataPairs(string dataPairLoc, vector< pair<string, string> >* dataPairs, map<int, string>* comments, char delim = delimeter){
 	unsigned long long int lineCount = 1;
 	ofstream outFile(dataPairLoc.c_str());
 	if (!outFile.good()) {
 		return;
 	}
 	//add items to configuration file
-	map<string, string>::iterator it = dataPairs->begin();
+	vector< pair<string, string> >::iterator it = dataPairs->begin();
 	while(it != dataPairs->end()){
 		while(comments->find(lineCount) != comments->end()){
-			outFile << "#" << comments->find(lineCount) << endl;
+			outFile << "# " << comments->at(lineCount) << endl;
 			lineCount++;
 		}
-		lineCount++;
 		outFile << it->first << delim << it->second << endl;
+		lineCount++;
 	}
+
 	outFile.close();
 }//writeDataPairs(string, map<string, string>*, string)
 
@@ -500,7 +537,7 @@ Writes out of key/value pairs to the given file location.
 @param dataPairs The data pairs to write out.
 @param delim Optional. The delimeter to use between the key/value pairs.
  */
-void writeDataPairs(string dataPairLoc, map<string, string>* dataPairs, string delim = delimeter){
+void writeDataPairs(string dataPairLoc, vector< pair<string, string> >* dataPairs, char delim = delimeter){
 	map<int, string> temp;
 	writeDataPairs(dataPairLoc, dataPairs, &temp, delim);
 }//writeDataPairs(string, map<string, string>*, string)
