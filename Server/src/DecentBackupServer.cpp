@@ -7,6 +7,9 @@
 
 	Notes:
 		Using C++ standard 2011 (c++11x or c++0x)
+
+	TODO::
+		- Make config ops use the new functions
 */
 
 ///////////////
@@ -16,6 +19,7 @@
 //includes
 #include <stdlib.h>//for many things
 #include <vector>//for lists of things
+#include <map>//for data pairs
 #include <string.h>//for strings
 #include <sstream>//for string stream on the outputs
 #include <iostream>//to do console stuff
@@ -55,7 +59,7 @@ const string clientSyncFileListName = "DBSS_STORED_FILES.txt";
 const string clientSyncGetFileListName = "DBSS_TO_GET_LIST.txt";
 const string clientSyncIgnoreFileListName = "DBSS_IGNORE_LIST.txt";
 
-int checkInterval = 60;//in seconds
+int checkInterval = 60;//how often to wait between checking sync foldders in seconds
 
 /* Option Flags */
 bool runFlag = false;//if to run the server or not
@@ -125,26 +129,19 @@ void mySleep(int sleepS){
 	@return If the path given is valid.
  */
 bool checkFilePath(string pathIn, bool dir){
-    //sendDebugMsg("Path Given: " + pathIn);
     bool worked = false;//if things worked
     struct stat pathStat;//buffer for the stat
     //check if valid
     if(worked = (lstat(pathIn.c_str(), &pathStat) == 0)){
-        //sendDebugMsg("path is present");
         //check if a file or directory
         if((S_ISDIR(pathStat.st_mode)) && dir){
-            //sendDebugMsg("path is dir");
             worked = true;
-        }else if((pathStat.st_mode && S_IFREG) && !dir){
-            //sendDebugMsg("path is file");
-            //check if valid filetype
+        }else if((pathStat.st_mode && S_IFREG) && !dir){//check if valid filetype
             worked = true;
         }else{
-            //sendDebugMsg("path is not recognized");
             worked = false;
         }
     }else{//if valid path
-        //sendDebugMsg("path is invalid");
         worked = false;
     }
     return worked;
@@ -167,6 +164,7 @@ string getTimestamp(){
 
 /**
 	Gets a certain number of tabs.
+
 	@param numTabs The number of tabs you want (defaults to 0).
 */
 string getTabs(int numTabs = 1) {
@@ -240,6 +238,7 @@ void createDirectory(string directoryLocation){
 	string dir = "mkdir " + directoryLocation;
 	system(dir.c_str());
 	if(!checkFilePath(directoryLocation, true)){
+
 		//create the parent directory
 		string parDir = directoryLocation.substr(0,directoryLocation.find_last_of(getSeparater(directoryLocation)));//parent directory
 		createDirectory(parDir);
@@ -281,8 +280,6 @@ long getFileSize(string file) {
 /**
 	Copies a file from a path into the given directory. Creates the destination directory if it is not present.
 
-	TODO:: find out if this removes the file.
-
 	@param fromPath The path of the file to move.
 	@param toDir The directory to move the file into.
 */
@@ -294,8 +291,6 @@ string copyFile(string fromPath, string toDir, int tabLevel = 3) {
 	}
 	//create destination location
 	string toPath = toDir + foldSeparater + getLastPartOfPath(fromPath);
-
-	//TODO:: check if file already present where copying; remove it first if there?
 
 	// check/wait for file to be done transferring
 	output += outputText("r", "Checking that file is not being transferred by another process...", false, tabLevel + 1);
@@ -448,6 +443,67 @@ void readFileList(string fileListLoc, vector<string>* fileList){
 	}
 	fileListFile.close();
 }//readFileList(string, vector<string>*)
+
+/**
+Reads data pairs from a file, and puts them into a provided 2D vector.
+
+Accepts a '#' as a comment, and ignores the line.
+
+@param dataPairLoc The location of the file with the data pairs.
+@param dataPairs The map we are placing the pairs into.
+@param delim Optional param for setting the delimeter used in the file.
+ */
+void readDataPairs(string dataPairLoc, map<string, string>* dataPairs, string delim = delimeter){
+	ifstream fileListFile(fileListLoc.c_str());
+	string curLine, key, data;;
+	while (fileListFile.good()) {
+		getline(confFile, key, delim.c_str()[0]);
+		if (key != "" && key.at(0) != '#') {
+			getline(confFile, data, nlc);
+			dataPairs->insert(make_pair(key, data));
+		}
+	}
+	fileListFile.close();
+}//readDataPairs(string, map<string, string>*, string)
+
+/**
+Writes out of key/value pairs to the given file location.
+
+@param dataPairLoc The location of the file to write to.
+@param dataPairs The data pairs to write out.
+@param comments Comments to write out. Key is the line to put the comment (value) at.
+@param delim Optional. The delimeter to use between the key/value pairs.
+ */
+void writeDataPairs(string dataPairLoc, map<string, string>* dataPairs, map<int, string>* comments, string delim = delimeter){
+	unsigned long long int lineCount = 1;
+	ofstream outFile(configLoc.c_str());
+	if (!outFile.good()) {
+		return;
+	}
+	//add items to configuration file
+	map<string, string>::iterator it = dataPairs->begin();
+	while(it != dataPairs->end()){
+		while(comments->find(lineCount) != comments->end()){
+			outFile << "#" << comments->find(lineCount) << endl;
+			lineCount++;
+		}
+		lineCount++;
+		outFile << it->first << delim << it->second << endl;
+	}
+	outFile.close();
+}//writeDataPairs(string, map<string, string>*, string)
+
+/**
+Writes out of key/value pairs to the given file location.
+
+@param dataPairLoc The location of the file to write to.
+@param dataPairs The data pairs to write out.
+@param delim Optional. The delimeter to use between the key/value pairs.
+ */
+void writeDataPairs(string dataPairLoc, map<string, string>* dataPairs, string delim = delimeter){
+	map<int, string> temp;
+	writeDataPairs(dataPairLoc, dataPairs, &temp, delim);
+}//writeDataPairs(string, map<string, string>*, string)
 
 /**
 	Removes any empty sub directories in the given directory.
@@ -834,7 +890,6 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	ignoreList.push_back(thisFoldSeparater + syncFileListName);
 	ignoreList.push_back(thisFoldSeparater + getListFileName);
 	ignoreList.push_back(thisFoldSeparater + ignoreListFileName);
-
 	//process config folder
 	output += ensureFolderConfig(syncConfigLoc);
 	output += readFolderConfig(syncConfigLoc, &numToKeep, delimeter + "", tabLevel + 1);
@@ -1182,3 +1237,27 @@ int main(int argc, char *argv[]){
 
 	return 0;
 }//main()
+
+#ifdef _WIN32
+///////////////
+#pragma region Service - Sets up windows services functions.
+///////////////
+
+/////////////////
+#pragma endregion
+/////////////////
+#endif
+
+
+
+
+
+#ifdef __linux__
+///////////////
+#pragma region Daemon - Sets up linux daemon functions.
+///////////////
+
+/////////////////
+#pragma endregion
+/////////////////
+#endif
