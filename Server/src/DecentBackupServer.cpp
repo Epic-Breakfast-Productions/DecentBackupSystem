@@ -43,15 +43,22 @@ using namespace std;
 **	Globals  **
 **************/
 const string version = "A1.0.2";//version number
-const char delimeter = ';';//the delimiter to use betwen key/values for config files
-string logFileLoc = "DBSS_LOG.txt";//the log file
+const char delimeter = '=';//the delimiter to use betwen key/values for config files
+
 string confFileLoc = "DBSS_CONF.txt";//the config file
 
 string syncFolderPred = "DBSS_sync_";// the filename predicate for sync folders
 string storFolderPred = "DBSS_stor_";// the filename predicate for storage folders
 
-string syncFolderLoc = syncFolderPred + "dir";
-string storFolderLoc = storFolderPred + "dir";
+//overall config defaults
+vector< pair<string, string> > configDefault {
+	make_pair("logLoc", "DBSS_LOG.txt"),//location of the log file
+	make_pair("syncFolderLoc", syncFolderPred + "dir"),//location of the synced folders
+	make_pair("storFolderLoc", storFolderPred + "dir"),//location of the storage folders
+	make_pair("checkInterval", "60")//the interval (in seconds) that ther server checks folders
+};
+//overall config
+vector< pair<string, string> > configWorking = configDefault;
 
 //sync folder files
 const string clientConfigFileName = "DBSS_CLIENT_CONF.txt";
@@ -59,22 +66,26 @@ const string clientSyncFileListName = "DBSS_STORED_FILES.txt";
 const string clientSyncGetFileListName = "DBSS_TO_GET_LIST.txt";
 const string clientSyncIgnoreFileListName = "DBSS_IGNORE_LIST.txt";
 
-int checkInterval = 60;//how often to wait between checking sync foldders in seconds
+//int checkInterval = 60;//how often to wait between checking sync foldders in seconds
 
-/* Option Flags */
+/* for sync folder config */
+vector< pair<string, string> > syncConfigDefault {
+	make_pair("numBackupsToKeep", "-1")
+};
+
+//int numBackupsToKeepDef = -1;
+//int numBackupsToKeep = numBackupsToKeepDef;
+
+/* Other */
+int transferWait = 3;//the amount of time to wait to se if a file has finished transferring, in seconds
+
+/* Option Flags (for run) */
 bool runFlag = false;//if to run the server or not
 bool helpFlag = false;//if to display the help (stops the execution after displaying help)
 bool listFlag = false;//
 bool verbose = false;//if to output much more to console
 bool setToStartOnStart = false;//if to set the program to run on startup
 bool runTest = false;//if to run the test code
-
-/* for sync folder config */
-int numBackupsToKeepDef = -1;
-int numBackupsToKeep = numBackupsToKeepDef;
-
-/* Other */
-int transferWait = 3;//the amount of time to wait to se if a file has finished transferring, in seconds
 
 //sleep stuff/ other sys dependent stuff
 #ifdef __linux__
@@ -120,6 +131,45 @@ void mySleepMs(int sleepMs) {
 void mySleep(int sleepS){
 	mySleepMs(sleepS * 1000);
 }//mySleep(int)
+
+/**
+Gets the index of the pair with the given key in the vector.
+
+Returns -1 on not finding the key.
+
+@param vectArr The array of pairs we are searching.
+@param var The value of the key we are searching for.
+@return The index of the pair with the given key in the vector. -1 if key not found.
+ */
+int getIndOfKey(vector< pair<string, string> >* vectArr, string var){
+	int i = 0;
+	for (const auto& pair : *vectArr) {
+		if(pair.first == var){
+			return i;
+		}
+		i++;
+	}
+	return -1;
+}//getIndOfKey(vector< pair<string, string> >*, string)
+
+/**
+Determines if the vector array has a pair with the given key.
+
+@param vectArr The array of pairs we are searching.
+@param var The value of the key we are searching for.
+@return The index of the pair with the given key in the vector was found.
+ */
+bool hasVar(vector< pair<string, string> >* vectArr, string var){
+	return (getIndOfKey(vectArr, var) > -1);
+}
+
+//TODO:: doc
+string getVal(vector< pair<string, string> >* vectArr, string var){
+	if(hasVar(vectArr, var)){
+		return vectArr->at(getIndOfKey(vectArr, var)).second;
+	}
+	return "\0";
+}
 
 /**
 	Checks if the file path given is present.
@@ -191,13 +241,13 @@ string outputText(string types, string message, bool verbosity = true, int tabLe
 		cout << outputText;
 	}
 	if(types.find('l') != string::npos){
-		ofstream confFile (logFileLoc.c_str(), ios::app);
+		ofstream logFile (getVal(&configWorking, "logLoc").c_str(), ios::app);
 		if(message != ""){
-			confFile << outputText;
+			logFile << outputText;
 		}else{
-			confFile << endl;
+			logFile << endl;
 		}
-		confFile.close();
+		logFile.close();
 	}
 	if(types.find('r') != string::npos){
 		return outputText;
@@ -319,37 +369,6 @@ string copyFile(string fromPath, string toDir, int tabLevel = 3) {
 	}
 	return output + outputText("r", "Done.", false, tabLevel);
 }//copyFile(string, string, int)
-
-/**
-Gets the index of the pair with the given key in the vector.
-
-Returns -1 on not finding the key.
-
-@param vectArr The array of pairs we are searching.
-@param var The value of the key we are searching for.
-@return The index of the pair with the given key in the vector. -1 if key not found.
- */
-int getIndOfKey(vector< pair<string, string> >* vectArr, string var){
-	int i = 0;
-	for (const auto& pair : *vectArr) {
-		if(pair.first == var){
-			return i;
-		}
-		i++;
-	}
-	return -1;
-}//getIndOfKey(vector< pair<string, string> >*, string)
-
-/**
-Determines if the vector array has a pair with the given key.
-
-@param vectArr The array of pairs we are searching.
-@param var The value of the key we are searching for.
-@return The index of the pair with the given key in the vector was found.
- */
-bool hasVar(vector< pair<string, string> >* vectArr, string var){
-	return (getIndOfKey(vectArr, var) > -1);
-}
 
 /////////////////
 #pragma endregion workers
@@ -525,6 +544,7 @@ void writeDataPairs(string dataPairLoc, vector< pair<string, string> >* dataPair
 		}
 		outFile << it->first << delim << it->second << endl;
 		lineCount++;
+		it++;
 	}
 
 	outFile.close();
@@ -582,14 +602,9 @@ void removeEmptySubfolders(string parentDir){
 */
 string generateFolderConfig(string configLoc, int tabLevel = 2) {
 	string output = outputText("r", "Generating folder configuration...", false, tabLevel);
-	ofstream confFile(configLoc.c_str());
-	if (!confFile.good()) {
-		output += outputText("r", "ERROR:: Unable to create or open new sync config file.", false, tabLevel + 1);
-		return output + outputText("r", "Done ---WITH ERRORS---", verbose, tabLevel);
-	}
-	//add items to configuration file
-	confFile << "numBackupsToKeep" << delimeter << "5";
-	confFile.close();
+
+	writeDataPairs(configLoc, &syncConfigDefault);
+
 	return output + outputText("r", "Done.", false, tabLevel);;
 }//generateFolderConfig(string, int)
 
@@ -611,29 +626,16 @@ string ensureFolderConfig(string configLoc, int tabLevel = 1) {
 }//ensureFolderConfig(string, int)
 
 /**
-	Reads the folder config into the globals.
+	Reads the folder config into the config vector.
 
 	@param configLoc The location of the config file to read from.
 	@param backupsToKeep The pointer to the integer to keep track of the number of backups to keep.
 	@param thisDelimeter The delimeter to go between the key/value pairs in the config file.
 	@param tabLevel The number of tabs put in front of output lines.
 */
-string readFolderConfig(string configLoc, int* backupsToKeep, string thisDelimeter = delimeter + "", int tabLevel = 1) {
+string readFolderConfig(string configLoc, vector< pair<string, string> >* workingConfig, string thisDelimeter = delimeter + "", int tabLevel = 1) {
 	string output = outputText("r", "Reading configuration file...", false, tabLevel);
-
-	ifstream confFile(configLoc.c_str()); // declare file stream: http://www.cplusplus.com/reference/iostream/ifstream/
-	string variable, value;
-
-	while (confFile.good()) {
-		getline(confFile, variable, thisDelimeter.c_str()[0]);
-		getline(confFile, value, '\n');
-		//cout << "\"" << variable << "\", \"" << value << "\"" << endl;
-		if (variable == "numBackupsToKeep") {
-			output += outputText("r", "Got # of backups to keep: " + value, false, tabLevel + 1);
-			*backupsToKeep = atoi(value.c_str());
-		}
-	}
-	confFile.close();
+	readDataPairs(configLoc, workingConfig, thisDelimeter.c_str()[0]);
 	return output + outputText("r", "Done.", false, tabLevel);
 }//readFolderConfig(string, int*, string, int)
 
@@ -811,7 +813,7 @@ string getListOfFilesToIgnore(string syncIgnoreListLoc, vector<string>* toIgnore
 	@param tabLevel The number of tabs put in front of output lines.
 */
 string moveFolderContents(string fromFolderLoc, string toFolderLoc, vector<string>* ignoreList, string levels = "", int tabLevel = 1) {
-	string output = outputText("r", "Moving files and folders in \"" + syncFolderLoc + levels + "\" to \"" + storFolderLoc + levels + "\"...", false, tabLevel);
+	string output = outputText("r", "Moving files and folders in \"" + fromFolderLoc + levels + "\" to \"" + toFolderLoc + levels + "\"...", false, tabLevel);
 
 	//get directory and file list
 	vector<string> dirList;
@@ -906,12 +908,11 @@ string moveFilesToGet(string storFolderLoc, string syncFolderLoc, vector<string>
 	Processes an entire sync folder to move things accordingly.
 	TODO:: doc
  */
-string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, bool verbosity = verbose, string configFileName = clientConfigFileName, string syncFileListName = clientSyncFileListName, string getListFileName = clientSyncGetFileListName, string ignoreListFileName = clientSyncIgnoreFileListName, int thisNumBackupsToKeep = numBackupsToKeepDef, string thisFoldSeparater = foldSeparater, string thisnlc = nlc) {
+string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, bool verbosity = verbose, string configFileName = clientConfigFileName, string syncFileListName = clientSyncFileListName, string getListFileName = clientSyncGetFileListName, string ignoreListFileName = clientSyncIgnoreFileListName, string thisFoldSeparater = foldSeparater, string thisnlc = nlc) {
 	string output = outputText("r", "Processing folder:\"" + syncDirLoc + "\"...", false, tabLevel);
 	output += outputText("r", "Storage directory: \"" + storeDirLoc + "\"", false, tabLevel + 1);
 
-	//config values
-	int numToKeep = thisNumBackupsToKeep;
+	vector< pair<string, string> > syncConfigWorking = syncConfigDefault;
 
 	//config and other list locations
 	string syncConfigLoc = syncDirLoc + thisFoldSeparater + configFileName;
@@ -929,7 +930,7 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	ignoreList.push_back(thisFoldSeparater + ignoreListFileName);
 	//process config folder
 	output += ensureFolderConfig(syncConfigLoc);
-	output += readFolderConfig(syncConfigLoc, &numToKeep, delimeter + "", tabLevel + 1);
+	output += readFolderConfig(syncConfigLoc, &syncConfigWorking, delimeter + "", tabLevel + 1);
 
 	//process ignore folder
 	output += ensureIgnoreList(syncIgnoreListLoc);
@@ -975,7 +976,14 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	output += moveFilesToGet(storeDirLoc, syncDirLoc, &getList, tabLevel + 1);
 
 	//crop the number of files in storage
-	output += cropNumInStor(storeDirLoc, thisNumBackupsToKeep);
+	output += outputText("r", "Cropping number of files in storage...", verbosity, tabLevel + 1);
+	try{
+		output += cropNumInStor(storeDirLoc, stoi(getVal(&syncConfigWorking, "numBackupsToKeep")));
+	}catch(invalid_argument ex){
+		output += outputText("r", "Invalid config value:: \"numBackupsToKeep" + delimeter + getVal(&syncConfigWorking, "numBackupsToKeep") + "\". Defaulting to: " + getVal(&syncConfigDefault, "numBackupsToKeep"), verbosity, tabLevel + 2);
+		output += cropNumInStor(storeDirLoc, stoi(getVal(&syncConfigDefault, "numBackupsToKeep")));
+	}
+	output += outputText("r", "Done.", verbosity, tabLevel + 1);
 
 	//refresh storage file list
 	output += refreshFileList(syncFileListLoc, storeDirLoc);
@@ -998,15 +1006,15 @@ void searchSyncDir() {
 	vector<string> fileList;
 	vector<string> dirList;
 
-	getItemsInDir(syncFolderLoc, &fileList, &dirList);
+	getItemsInDir(getVal(&configWorking, "syncFolderLoc"), &fileList, &dirList);
 
 	unsigned long numDir = dirList.size();
 
 	if(numDir > 0){
 		outputText("cl", "# of folders to process: " + to_string(numDir), verbose, 1);
 		for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
-			string curSyncFolder = syncFolderLoc + foldSeparater + *it;
-			string curStorFolder = storFolderLoc + foldSeparater + *it;
+			string curSyncFolder = getVal(&configWorking, "syncFolderLoc") + foldSeparater + *it;
+			string curStorFolder = getVal(&configWorking, "storFolderLoc") + foldSeparater + *it;
 			if (checkFilePath(curSyncFolder, true)) {
 				//TODO:: do this with thread pooling
 				outputText("cl", "Finished processing folder. Output:" + nlc + nlc + processSyncDir(curSyncFolder, curStorFolder) + "End of output." + nlc, verbose, 1);
@@ -1049,16 +1057,16 @@ bool setRunOnStart() {
 ///////////////
 
 /**
-	Runs the server. Sets up and reads configuration file, handles waiting before running through the sync folders again.
+	Runs the server.
 */
 void runServer() {
 	bool okay = true;
 	outputText("cl", nlc + nlc + nlc + nlc + nlc + "######## START SERVER ########", verbose);
 
 	//test to see if sync and storage folders are present. create them if not.
-	if (!checkFilePath(syncFolderLoc, true)) {
-		createDirectory(syncFolderLoc);
-		if (!checkFilePath(syncFolderLoc, true)) {
+	if (!checkFilePath(getVal(&configWorking, "syncFolderLoc"), true)) {
+		createDirectory(getVal(&configWorking, "syncFolderLoc"));
+		if (!checkFilePath(getVal(&configWorking, "syncFolderLoc"), true)) {
 			outputText("cl", "******** FAILED TO CREATE/ OPEN SYNC DIRECTORY. EXITING. ********", verbose, 0);
 			okay = false;
 		}
@@ -1067,9 +1075,9 @@ void runServer() {
 		}
 	}
 
-	if (!checkFilePath(storFolderLoc, true)) {
-		createDirectory(storFolderLoc);
-		if (!checkFilePath(storFolderLoc, true)) {
+	if (!checkFilePath(getVal(&configWorking, "storFolderLoc"), true)) {
+		createDirectory(getVal(&configWorking, "storFolderLoc"));
+		if (!checkFilePath(getVal(&configWorking, "storFolderLoc"), true)) {
 			outputText("cl", "******** FAILED TO CREATE/ OPEN STORAGE DIRECTORY. EXITING. ********", verbose, 0);
 			okay = false;
 		}
@@ -1080,13 +1088,18 @@ void runServer() {
 
 	string waitIntStr;
 	ostringstream convert;   // stream used for the conversion
-	convert << checkInterval;
+	convert << getVal(&configWorking, "checkInterval");
 	waitIntStr = convert.str();
 	if (okay) {
 		while (okay) {
 			searchSyncDir();
 			outputText("cl", "Done folder processing. Waiting " + waitIntStr + " seconds..." + nlc + nlc + nlc, verbose, 0);
-			mySleep(checkInterval);
+			try{
+				mySleep(stoi(getVal(&configWorking, "checkInterval")));
+			}catch(invalid_argument ex){
+				outputText("cl", "Invalid config value:: \"checkInterval" + delimeter + getVal(&configWorking, "checkInterval") + "\". Using default...", verbose, 1);
+				mySleep(stoi(getVal(&configDefault, "checkInterval")));
+			}
 			outputText("cl", "Done waiting.", verbose, 0);
 			outputText("cl", "", verbose);
 			//TODO:: check for errors?
@@ -1099,58 +1112,24 @@ void runServer() {
 
 /**
 	Generates the default main configuration file at the current working directory of the executable (where it will look for it)
+		TODO:: work with new config methods
 */
 void generateMainConfig() {
 	outputText("c", "Generating Main Config File...", verbose);
-	ofstream confFile(confFileLoc.c_str(), ios::app);
-	if (!confFile.good()) {
-		outputText("c", "ERROR:: Unable to create or open config file.", true);
-		return;
-	}
-	confFile << "logFileLoc" << delimeter << logFileLoc.c_str() << endl <<
-		"syncFolderPred" << delimeter << syncFolderPred.c_str() << endl <<
-		"syncFolderLoc" << delimeter << syncFolderLoc.c_str() << endl <<
-		"storFolderPred" << delimeter << storFolderPred.c_str() << endl <<
-		"storFolderLoc" << delimeter << storFolderLoc.c_str() << endl <<
-		"checkInterval" << delimeter << checkInterval;
-	confFile.close();
-	outputText("c", "Done.", verbose);
+
+	writeDataPairs(confFileLoc, &configWorking);
+
 	return;
 }//generateConfig()
 
 /**
 	Reads the main configuration file into global variables to work with.
+
+	TODO:: work with new config methods
 */
 void readMainConfig() {
-	ifstream confFile(confFileLoc.c_str()); // declare file stream: http://www.cplusplus.com/reference/iostream/ifstream/
-	string variable, value;
-
-	while (confFile.good()) {
-		getline(confFile, variable, delimeter);
-		getline(confFile, value, '\n');
-		//cout << "\"" << variable << "\", \"" << value << "\"" << endl;
-		if (variable == "logFileLoc") {
-			logFileLoc = value;
-		}
-		else if (variable == "syncFolderPred") {
-			syncFolderPred = value;
-		}
-		else if (variable == "syncFolderLoc") {
-			syncFolderLoc = value;
-		}
-		else if (variable == "storFolderPred") {
-			storFolderPred = value;
-		}
-		else if (variable == "storFolderLoc") {
-			storFolderLoc = value;
-		}
-		else if (variable == "checkInterval") {
-			checkInterval = atoi(value.c_str());
-		}
-	}//while reading config file
-
-	confFile.close();
-}//readConfig()
+	readDataPairs(confFileLoc, &configWorking);
+}//readMainConfig()
 
 
 /////////////////
@@ -1165,9 +1144,15 @@ void readMainConfig() {
 	Function for testing functions. "Remove for end product"
 */
 void test(){
-	cout << "test" << endl;
-	createDirectory("test1");
-	createDirectory("test2/test3");
+	cout << "testing the daemon thingy...." << endl;
+	int result = daemon(1,1);
+	if(result == 0){
+		cout << "Success, daemon started successfully i think" << endl;
+	}else if(result == -1){
+		cout << "Daemon starting failed." << endl;
+	}
+	mySleep(60);
+	cout << "this still going?" << endl;
 }//test()
 
 /**
@@ -1255,9 +1240,9 @@ int main(int argc, char *argv[]){
 	if(listFlag){
 		cout << "Files and folders:" << endl <<
 			"\tConfig File:       " << confFileLoc << endl <<
-			"\tLog File:          " << logFileLoc << endl <<
-			"\tSync Directory:    " << syncFolderLoc << endl <<
-			"\tStorage Directory: " << storFolderLoc << endl;
+			"\tLog File:          " << getVal(&configWorking, "logLoc") << endl <<
+			"\tSync Directory:    " << getVal(&configWorking, "syncFolderLoc") << endl <<
+			"\tStorage Directory: " << getVal(&configWorking, "storFolderLoc") << endl;
 	}
 
 	if(setToStartOnStart){
@@ -1293,6 +1278,7 @@ int main(int argc, char *argv[]){
 ///////////////
 #pragma region Daemon - Sets up linux daemon functions.
 ///////////////
+
 
 /////////////////
 #pragma endregion
