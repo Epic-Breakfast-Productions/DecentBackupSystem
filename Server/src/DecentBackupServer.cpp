@@ -42,6 +42,15 @@ using namespace std;
 /**************
 **	Globals  **
 **************/
+#ifdef __linux__
+const string foldSeparater = "/";
+const string nlc = "\n";
+#endif
+#ifdef _WIN32
+const string foldSeparater = "\\";
+const string nlc = "\r\n";
+#endif
+
 const string version = "A1.0.2";//version number
 const char delimeter = '=';//the delimiter to use betwen key/values for config files
 
@@ -49,6 +58,8 @@ string confFileLoc = "DBSS_CONF.txt";//the config file
 
 string syncFolderPred = "DBSS_sync_";// the filename predicate for sync folders
 string storFolderPred = "DBSS_stor_";// the filename predicate for storage folders
+
+string syncFileFold = "DBSS";
 
 //overall config defaults
 vector< pair<string, string> > configDefault {
@@ -61,10 +72,10 @@ vector< pair<string, string> > configDefault {
 vector< pair<string, string> > configWorking = configDefault;
 
 //sync folder files
-const string clientConfigFileName = "DBSS_CLIENT_CONF.txt";
-const string clientSyncFileListName = "DBSS_STORED_FILES.txt";
-const string clientSyncGetFileListName = "DBSS_TO_GET_LIST.txt";
-const string clientSyncIgnoreFileListName = "DBSS_IGNORE_LIST.txt";
+const string clientConfigFileName = syncFileFold + foldSeparater + "DBSS_CLIENT_CONF.txt";
+const string clientSyncFileListName = syncFileFold + foldSeparater + "DBSS_STORED_FILES.txt";
+const string clientSyncGetFileListName = syncFileFold + foldSeparater + "DBSS_TO_GET_LIST.txt";
+const string clientSyncIgnoreFileListName = syncFileFold + foldSeparater + "DBSS_IGNORE_LIST.txt";
 
 //int checkInterval = 60;//how often to wait between checking sync foldders in seconds
 
@@ -86,16 +97,6 @@ bool listFlag = false;//
 bool verbose = false;//if to output much more to console
 bool setToStartOnStart = false;//if to set the program to run on startup
 bool runTest = false;//if to run the test code
-
-//sleep stuff/ other sys dependent stuff
-#ifdef __linux__
-const string foldSeparater = "/";
-const string nlc = "\n";
-#endif
-#ifdef _WIN32
-const string foldSeparater = "\\";
-const string nlc = "\r\n";
-#endif
 
 /////////////////
 #pragma endregion
@@ -594,6 +595,22 @@ void removeEmptySubfolders(string parentDir){
 #pragma region SyncFolderOps - operations for sync folders.
 ///////////////
 
+//TODO::docs
+string ensureServFileFold(string syncFolderLoc, int tabLevel = 2){
+	string output = "";
+	if (!checkFilePath(syncFolderLoc + foldSeparater + syncFileFold, true)) {
+		output += outputText("r", "Client folder not found. Creating...", false, tabLevel);
+		createDirectory(syncFolderLoc + foldSeparater + syncFileFold);
+		if (!checkFilePath(syncFolderLoc + foldSeparater + syncFileFold, true)) {
+			output += outputText("r", "ERROR:: FAILED TO CREATE CLIENT DIRECTORY", tabLevel +1);
+			output += outputText("r", "Done ---WITH ERROR---", tabLevel);
+		} else {
+			output += outputText("r", "Done.", tabLevel);
+		}
+	}
+	return output;
+}
+
 /**
 	Generates the folder config for a sync folder.
 
@@ -669,12 +686,15 @@ Crops the number of files in storage to the number set by the config.
 @param tabLevel The number of tabs put in front of output lines.
 */
 string cropNumInStor(string storDir, int numToKeep, int tabLevel = 1) {
-	if (numToKeep == -1) {
-		return "";
-	}
 	string output = outputText("r", "Cropping number of files in the storage folder...", false, tabLevel);
+	if (numToKeep == -1) {
+		output += outputText("r", "Skipping. Set to not crop # of files in storage.", false, tabLevel + 1);
+		return output + outputText("r", "Done.", false, tabLevel);
+	}
 
-	//TODO:: crop number of items in folder to the number given
+	//TODO:: for each folder/sub folder, remove the oldest file until at the number given.
+
+	return output + outputText("r", "Done.", false, tabLevel);
 }//cropNumInStor(string, int, int)
 
 /**
@@ -924,15 +944,16 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	vector<string> getList;
 	vector<string> ignoreList;
 	//add the defaults to ignore list.
-	ignoreList.push_back(thisFoldSeparater + configFileName);
-	ignoreList.push_back(thisFoldSeparater + syncFileListName);
-	ignoreList.push_back(thisFoldSeparater + getListFileName);
-	ignoreList.push_back(thisFoldSeparater + ignoreListFileName);
-	//process config folder
-	output += ensureFolderConfig(syncConfigLoc);
+	ignoreList.push_back(thisFoldSeparater + syncFileFold);
+
+	//ensure client files folder there
+	output += ensureServFileFold(syncDirLoc, tabLevel);
+
+	//process config file
+	output += ensureFolderConfig(syncConfigLoc, tabLevel);
 	output += readFolderConfig(syncConfigLoc, &syncConfigWorking, delimeter + "", tabLevel + 1);
 
-	//process ignore folder
+	//process ignore file
 	output += ensureIgnoreList(syncIgnoreListLoc);
 	output += getListOfFilesToIgnore(syncIgnoreListLoc, &ignoreList);
 
@@ -1116,11 +1137,20 @@ void runServer() {
 */
 void generateMainConfig() {
 	outputText("c", "Generating Main Config File...", verbose);
-
 	writeDataPairs(confFileLoc, &configWorking);
-
 	return;
 }//generateConfig()
+
+//TODO:: doc
+void ensureMainConfig(){
+	if(!checkFilePath(confFileLoc, false) ){
+		outputText("c", "Unable to open config file. Creating a new one...", verbose);
+		generateMainConfig();
+		if(!checkFilePath(confFileLoc, false) ){
+			outputText("c", "ERROR:: Unable to create or open config file.", true);
+		}
+	}
+}
 
 /**
 	Reads the main configuration file into global variables to work with.
@@ -1226,6 +1256,7 @@ int main(int argc, char *argv[]){
 	/**
 		Read config file for configuration stuff, creating it as necessary.
 	*/
+
 	if(!checkFilePath(confFileLoc, false) ){
 		outputText("c", "Unable to open config file. Creating a new one...", verbose);
 		generateMainConfig();
@@ -1279,6 +1310,13 @@ int main(int argc, char *argv[]){
 #pragma region Daemon - Sets up linux daemon functions.
 ///////////////
 
+void runDaemon(){
+	confFileLoc = "/etc/DBSS/" + confFileLoc;
+	configWorking.at(getIndOfKey(&configWorking, "logLoc")) = make_pair("logLoc", "/etc/DBSS/" + getVal(&configWorking, "logLoc"));
+	//make config?
+	ensureMainConfig();
+	//make log?
+}
 
 /////////////////
 #pragma endregion
