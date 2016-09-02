@@ -9,7 +9,6 @@
 		Using C++ standard 2011 (c++11x or c++0x)
 
 	TODO::
-		- Make config ops use the new functions
 */
 
 ///////////////
@@ -26,7 +25,7 @@
 #include <fstream>//to do file stuff
 #include <time.h>//for time measurement
 #include <algorithm>//for finding element in vector
-#include <sys/stat.h>//for checking filepaths
+#include <sys/stat.h>//for checking filepaths, file mod times
 #include <dirent.h>//for looking at contents of directory
 //sys dependent stuff
 #ifdef __linux__
@@ -146,10 +145,12 @@ int getIndOfKey(vector< pair<string, string> >* vectArr, string var){
 	int i = 0;
 	for (const auto& pair : *vectArr) {
 		if(pair.first == var){
+			//cout << "index of '" << var << "' is " << i << endl; 
 			return i;
 		}
 		i++;
 	}
+	//cout << "no index" << endl;
 	return -1;
 }//getIndOfKey(vector< pair<string, string> >*, string)
 
@@ -158,13 +159,20 @@ Determines if the vector array has a pair with the given key.
 
 @param vectArr The array of pairs we are searching.
 @param var The value of the key we are searching for.
-@return The index of the pair with the given key in the vector was found.
+@return If the vector has a pair with the given key.
  */
 bool hasVar(vector< pair<string, string> >* vectArr, string var){
+	//cout << var << " is " << getIndOfKey(vectArr, var) << endl;
 	return (getIndOfKey(vectArr, var) > -1);
 }
 
-//TODO:: doc
+/**
+	Gets the value of the pair with the given var key.
+	
+	@param getVal vectArr The 2D array of key/values.
+	@param var The variable key to get.
+	@return The value at the given key. "\0" if key not found.
+ */
 string getVal(vector< pair<string, string> >* vectArr, string var){
 	if(hasVar(vectArr, var)){
 		return vectArr->at(getIndOfKey(vectArr, var)).second;
@@ -371,6 +379,21 @@ string copyFile(string fromPath, string toDir, int tabLevel = 3) {
 	return output + outputText("r", "Done.", false, tabLevel);
 }//copyFile(string, string, int)
 
+//TODO:: docs
+bool isOlder(string fileOne, string fileTwo){
+	struct stat attrOne;
+	struct stat attrTwo;
+	
+    stat(fileOne.c_str(), &attrOne);
+    stat(fileTwo.c_str(), &attrTwo);
+	return ctime(&attrOne.st_mtime) > ctime(&attrTwo.st_mtime);
+}
+
+//TODO:: docs
+bool isYounger(string fileOne, string fileTwo){
+	return !isOlder(fileOne, fileTwo);
+}
+
 /////////////////
 #pragma endregion workers
 /////////////////
@@ -496,7 +519,7 @@ void readFileList(string fileListLoc, vector<string>* fileList){
 }//readFileList(string, vector<string>*)
 
 /**
-Reads data pairs from a file, and puts them into a provided 2D vector.
+Reads data pairs from a file, and puts them into a provided vector.
 
 Accepts a '#' as a comment, and ignores the line.
 
@@ -505,21 +528,41 @@ Accepts a '#' as a comment, and ignores the line.
 @param delim Optional param for setting the delimeter used in the file.
  */
 void readDataPairs(string dataPairLoc, vector< pair<string, string> >* dataPairs, char delim = delimeter){
-	ifstream fileListFile(dataPairLoc.c_str());
-	string curLine, key, data;
-	while (fileListFile.good()) {
-		getline(fileListFile, key, delim);
-		if (key != "" && key.at(0) != '#') {
-			getline(fileListFile, data, nlc.c_str()[0]);
+	//cout << "Reading pairs from \"" + dataPairLoc + "\"" << endl;//debugging
+	
+	ifstream pairFile(dataPairLoc.c_str());
+	if(!pairFile.good()){
+		pairFile.close();
+		cout << "ERROR:: readDataPairs()- could not open file." << endl;
+		return;
+	}else{
+		string line;
+		//cout << "in RDP Loop" << endl;//debugging
+		while(getline(pairFile, line)){
+			if(line[0] == '#'){
+				continue;
+			}
+			string key, val;
+			stringstream linestream(line);
+			
+			getline(linestream, key, delim);
+			getline(linestream, val, delim);
+			linestream.clear();
+			
+			//cout << "got data: " << key << delim << val << "'" << endl;//debugging
+			
 			if(hasVar(dataPairs, key)){
-				dataPairs->at(getIndOfKey(dataPairs, key)) = make_pair(key, data);
+				dataPairs->at(getIndOfKey(dataPairs, key)) = make_pair(key, val);
+				//cout << "\t  " << key << delim << dataPairs->at(getIndOfKey(dataPairs, key)).second << endl;//debugging
 			}else{
-				//todo::this actually work?
-				dataPairs->push_back({key, data});
+				dataPairs->push_back({key, val});
+				//cout << "\tnew entry in vector; " << val;
+				//cout << delim << key << endl;//debugging
 			}
 		}
+		//cout << "out RDP Loop" << endl;//debugging
 	}
-	fileListFile.close();
+	pairFile.close();
 }//readDataPairs(string, map<string, string>*, string)
 
 /**
@@ -595,7 +638,13 @@ void removeEmptySubfolders(string parentDir){
 #pragma region SyncFolderOps - operations for sync folders.
 ///////////////
 
-//TODO::docs
+/**
+	Ensures client files folder there (The folder in sync folder that holds DBSS info)
+	
+	@param syncFolderLoc The location of the folder.
+	@param tabLevel The number of tabs put in front of output lines.
+	@return The output results of the operation.
+ */
 string ensureServFileFold(string syncFolderLoc, int tabLevel = 2){
 	string output = "";
 	if (!checkFilePath(syncFolderLoc + foldSeparater + syncFileFold, true)) {
@@ -622,7 +671,7 @@ string generateFolderConfig(string configLoc, int tabLevel = 2) {
 
 	writeDataPairs(configLoc, &syncConfigDefault);
 
-	return output + outputText("r", "Done.", false, tabLevel);;
+	return output + outputText("r", "Done.", false, tabLevel);
 }//generateFolderConfig(string, int)
 
 /**
@@ -632,7 +681,7 @@ string generateFolderConfig(string configLoc, int tabLevel = 2) {
 	@param tabLevel The number of tabs put in front of output lines.
 */
 string ensureFolderConfig(string configLoc, int tabLevel = 1) {
-	string output = outputText("r", "Ensuring folder config is present...", false, tabLevel);
+	string output = outputText("r", "Ensuring folder config is present \"" + configLoc + "\"...", false, tabLevel);
 	if(!checkFilePath(configLoc, false)){
 		output += outputText("r", "Folder config not found.", false, tabLevel + 1);
 		output += generateFolderConfig(configLoc, tabLevel + 1);
@@ -650,9 +699,9 @@ string ensureFolderConfig(string configLoc, int tabLevel = 1) {
 	@param thisDelimeter The delimeter to go between the key/value pairs in the config file.
 	@param tabLevel The number of tabs put in front of output lines.
 */
-string readFolderConfig(string configLoc, vector< pair<string, string> >* workingConfig, string thisDelimeter = delimeter + "", int tabLevel = 1) {
-	string output = outputText("r", "Reading configuration file...", false, tabLevel);
-	readDataPairs(configLoc, workingConfig, thisDelimeter.c_str()[0]);
+string readFolderConfig(string configLoc, vector< pair<string, string> >* workingConfig, char thisDelimeter = delimeter, int tabLevel = 1) {
+	string output = outputText("r", "Reading configuration file \"" + configLoc + "\"...", false, tabLevel);
+	readDataPairs(configLoc, workingConfig, thisDelimeter);
 	return output + outputText("r", "Done.", false, tabLevel);
 }//readFolderConfig(string, int*, string, int)
 
@@ -686,13 +735,65 @@ Crops the number of files in storage to the number set by the config.
 @param tabLevel The number of tabs put in front of output lines.
 */
 string cropNumInStor(string storDir, int numToKeep, int tabLevel = 1) {
-	string output = outputText("r", "Cropping number of files in the storage folder...", false, tabLevel);
-	if (numToKeep == -1) {
-		output += outputText("r", "Skipping. Set to not crop # of files in storage.", false, tabLevel + 1);
+	string output = outputText("r", "Cropping number of files in the storage folder \"" + storDir + "\"...", false, tabLevel);
+	if (numToKeep <= -1) {
+		output += outputText("r", "Skipping. Set to not crop # of files in storage (" + to_string(numToKeep) + ").", false, tabLevel + 1);
 		return output + outputText("r", "Done.", false, tabLevel);
 	}
-
+	
 	//TODO:: for each folder/sub folder, remove the oldest file until at the number given.
+	
+	//get directory and file list
+	vector<string> dirList;
+	vector<string> fileList;
+	vector<string> sortedFileList;
+	getItemsInDir(storDir, &fileList, &dirList);
+
+	//process directories recursively
+	unsigned long numDir = dirList.size();
+	output += outputText("r", "Processing sub folders (" + to_string(numDir) + ")...", false, tabLevel + 1);
+	if(dirList.size() == 0){
+		output += outputText("r", "--None--", false, tabLevel + 2);
+	}else{
+		for (vector<string>::iterator it = dirList.begin(); it != dirList.end(); ++it) {
+			output += cropNumInStor(storDir + foldSeparater + *it, tabLevel + 2);
+		}
+	}
+	output += outputText("r", "Done.", false, tabLevel + 1);
+
+	//process files
+	unsigned long numFiles = fileList.size();
+	output += outputText("r", "Cropping number of files to " + to_string(numToKeep) + " (current number: " + to_string(numFiles) + ")...", false, tabLevel + 1);
+	if(fileList.size() == 0){
+		output += outputText("r", "--None--", false, tabLevel + 2);
+	}else{
+		for (vector<string>::iterator it = fileList.begin(); it != fileList.end(); ++it) {
+			string curFile = storDir + foldSeparater + *it;
+			int i = 0;
+			bool added = false;
+			for (vector<string>::iterator itInner = sortedFileList.begin(); itInner != sortedFileList.end() && added == false; ++itInner) {
+				if(isYounger(curFile, storDir + foldSeparater + *itInner)){
+					sortedFileList.insert(sortedFileList.begin() + i, curFile);
+					added = true;
+				}else{
+					i++;
+				}
+			}
+			if(!added){
+				sortedFileList.push_back(curFile);
+			}
+		}
+	}
+	
+	//remove the oldest files
+	numFiles = sortedFileList.size();
+	while(numFiles > numToKeep){
+		output += outputText("r", "REMOVING \"" + sortedFileList[0] + "\".", false, tabLevel + 2);
+		remove(sortedFileList[0].c_str());
+		sortedFileList.erase(sortedFileList.begin());
+		numFiles = sortedFileList.size();
+	}
+	output += outputText("r", "Done.", false, tabLevel + 1);
 
 	return output + outputText("r", "Done.", false, tabLevel);
 }//cropNumInStor(string, int, int)
@@ -891,7 +992,7 @@ string moveFolderContents(string fromFolderLoc, string toFolderLoc, vector<strin
 string moveFilesToGet(string storFolderLoc, string syncFolderLoc, vector<string>* getList, int tabLevel = 1) {
 	string output = outputText("r", "Moving files and folders to get in \"" + storFolderLoc + "\" to \"" + syncFolderLoc + "\"...", false, tabLevel);
 	if(getList->size() == 0){
-		output += outputText("r", "--No files to move--", false, tabLevel + 2);
+		output += outputText("r", "--No files to move--", false, tabLevel + 1);
 	}else{
 		//iterate through each in get list, moving it if need be.
 		for (vector<string>::iterator it = getList->begin(); it != getList->end(); ++it) {
@@ -947,11 +1048,11 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	ignoreList.push_back(thisFoldSeparater + syncFileFold);
 
 	//ensure client files folder there
-	output += ensureServFileFold(syncDirLoc, tabLevel);
+	output += ensureServFileFold(syncDirLoc, tabLevel + 1);
 
 	//process config file
-	output += ensureFolderConfig(syncConfigLoc, tabLevel);
-	output += readFolderConfig(syncConfigLoc, &syncConfigWorking, delimeter + "", tabLevel + 1);
+	output += ensureFolderConfig(syncConfigLoc, tabLevel + 1);
+	output += readFolderConfig(syncConfigLoc, &syncConfigWorking, delimeter, tabLevel + 1);
 
 	//process ignore file
 	output += ensureIgnoreList(syncIgnoreListLoc);
@@ -999,10 +1100,10 @@ string processSyncDir(string syncDirLoc, string storeDirLoc, int tabLevel = 0, b
 	//crop the number of files in storage
 	output += outputText("r", "Cropping number of files in storage...", verbosity, tabLevel + 1);
 	try{
-		output += cropNumInStor(storeDirLoc, stoi(getVal(&syncConfigWorking, "numBackupsToKeep")));
+		output += cropNumInStor(storeDirLoc, stoi(getVal(&syncConfigWorking, "numBackupsToKeep")), tabLevel + 2);
 	}catch(invalid_argument ex){
 		output += outputText("r", "Invalid config value:: \"numBackupsToKeep" + delimeter + getVal(&syncConfigWorking, "numBackupsToKeep") + "\". Defaulting to: " + getVal(&syncConfigDefault, "numBackupsToKeep"), verbosity, tabLevel + 2);
-		output += cropNumInStor(storeDirLoc, stoi(getVal(&syncConfigDefault, "numBackupsToKeep")));
+		output += cropNumInStor(storeDirLoc, stoi(getVal(&syncConfigDefault, "numBackupsToKeep")), tabLevel + 2);
 	}
 	output += outputText("r", "Done.", verbosity, tabLevel + 1);
 
