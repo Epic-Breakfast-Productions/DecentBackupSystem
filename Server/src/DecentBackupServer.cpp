@@ -9,6 +9,7 @@
 		Using C++ standard 2011 (c++11x or c++0x)
 
 	TODO::
+	make -i initialize everything (config file, log file)
 */
 
 ///////////////
@@ -90,12 +91,13 @@ vector< pair<string, string> > syncConfigDefault {
 int transferWait = 3;//the amount of time to wait to se if a file has finished transferring, in seconds
 
 /* Option Flags (for run) */
-bool runFlag = false;//if to run the server or not
-bool helpFlag = false;//if to display the help (stops the execution after displaying help)
-bool listFlag = false;//
-bool verbose = false;//if to output much more to console
-bool setToStartOnStart = false;//if to set the program to run on startup
-bool runTest = false;//if to run the test code
+bool runFlag = false,//if to run the server or not
+	 helpFlag = false,//if to display the help (stops the execution after displaying help)
+	 initFlag = false,
+	 listFlag = false,//
+	 verbose = false,//if to output much more to console
+	 setToRunAsServ = false,//if to set the program to run on startup
+	 runTest = false;//if to run the test code
 
 /////////////////
 #pragma endregion
@@ -145,7 +147,7 @@ int getIndOfKey(vector< pair<string, string> >* vectArr, string var){
 	int i = 0;
 	for (const auto& pair : *vectArr) {
 		if(pair.first == var){
-			//cout << "index of '" << var << "' is " << i << endl; 
+			//cout << "index of '" << var << "' is " << i << endl;
 			return i;
 		}
 		i++;
@@ -168,7 +170,7 @@ bool hasVar(vector< pair<string, string> >* vectArr, string var){
 
 /**
 	Gets the value of the pair with the given var key.
-	
+
 	@param getVal vectArr The 2D array of key/values.
 	@param var The variable key to get.
 	@return The value at the given key. "\0" if key not found.
@@ -383,7 +385,7 @@ string copyFile(string fromPath, string toDir, int tabLevel = 3) {
 bool isOlder(string fileOne, string fileTwo){
 	struct stat attrOne;
 	struct stat attrTwo;
-	
+
     stat(fileOne.c_str(), &attrOne);
     stat(fileTwo.c_str(), &attrTwo);
 	return ctime(&attrOne.st_mtime) > ctime(&attrTwo.st_mtime);
@@ -529,7 +531,7 @@ Accepts a '#' as a comment, and ignores the line.
  */
 void readDataPairs(string dataPairLoc, vector< pair<string, string> >* dataPairs, char delim = delimeter){
 	//cout << "Reading pairs from \"" + dataPairLoc + "\"" << endl;//debugging
-	
+
 	ifstream pairFile(dataPairLoc.c_str());
 	if(!pairFile.good()){
 		pairFile.close();
@@ -544,13 +546,13 @@ void readDataPairs(string dataPairLoc, vector< pair<string, string> >* dataPairs
 			}
 			string key, val;
 			stringstream linestream(line);
-			
+
 			getline(linestream, key, delim);
 			getline(linestream, val, delim);
 			linestream.clear();
-			
+
 			//cout << "got data: " << key << delim << val << "'" << endl;//debugging
-			
+
 			if(hasVar(dataPairs, key)){
 				dataPairs->at(getIndOfKey(dataPairs, key)) = make_pair(key, val);
 				//cout << "\t  " << key << delim << dataPairs->at(getIndOfKey(dataPairs, key)).second << endl;//debugging
@@ -640,7 +642,7 @@ void removeEmptySubfolders(string parentDir){
 
 /**
 	Ensures client files folder there (The folder in sync folder that holds DBSS info)
-	
+
 	@param syncFolderLoc The location of the folder.
 	@param tabLevel The number of tabs put in front of output lines.
 	@return The output results of the operation.
@@ -740,9 +742,9 @@ string cropNumInStor(string storDir, int numToKeep, int tabLevel = 1) {
 		output += outputText("r", "Skipping. Set to not crop # of files in storage (" + to_string(numToKeep) + ").", false, tabLevel + 1);
 		return output + outputText("r", "Done.", false, tabLevel);
 	}
-	
+
 	//TODO:: for each folder/sub folder, remove the oldest file until at the number given.
-	
+
 	//get directory and file list
 	vector<string> dirList;
 	vector<string> fileList;
@@ -784,7 +786,7 @@ string cropNumInStor(string storDir, int numToKeep, int tabLevel = 1) {
 			}
 		}
 	}
-	
+
 	//remove the oldest files
 	numFiles = sortedFileList.size();
 	while(numFiles > numToKeep){
@@ -1271,6 +1273,54 @@ void readMainConfig() {
 
 
 
+#ifdef _WIN32
+///////////////
+#pragma region Service - Sets up windows services functions.
+///////////////
+
+/////////////////
+#pragma endregion Service
+/////////////////
+#endif
+
+
+
+
+
+#ifdef __linux__
+///////////////
+#pragma region Daemon - Sets up linux daemon functions.
+///////////////
+
+void runDaemon(){
+	confFileLoc = "/etc/DBSS/" + confFileLoc;
+	configWorking.at(getIndOfKey(&configWorking, "logLoc")) = make_pair("logLoc", "/etc/DBSS/" + getVal(&configWorking, "logLoc"));
+	//make config?
+	ensureMainConfig();
+	//make log?
+}
+
+/////////////////
+#pragma endregion Daemon
+/////////////////
+#endif
+
+///////////////
+#pragma region ServGen
+///////////////
+
+void runAsServ(){
+#ifdef __linux__
+	runDaemon();
+#endif
+}//runAsServ()
+
+/////////////////
+#pragma endregion ServGen
+/////////////////
+
+
+
 /*
 	Function for testing functions. "Remove for end product"
 */
@@ -1307,6 +1357,9 @@ int main(int argc, char *argv[]){
 		if(string(argv[curArg]) == "-h"){
 			//cout << "displaying help" << endl;//debugging
 			helpFlag = true;
+		}else if(string(argv[curArg]) == "-i"){
+			//cout << "Initializing config file." << endl;//debugging
+			initFlag = true;
 		}else if(string(argv[curArg]) == "-r"){
 			//cout << "running server" << endl;//debugging
 			runFlag = true;
@@ -1321,18 +1374,23 @@ int main(int argc, char *argv[]){
 			curArg++;
 			confFileLoc = string(argv[curArg]);
 			outputText("c", "Config file set to: \"" + confFileLoc + "\"", true);
+		}else if(string(argv[curArg]) == "--log"){
+			//cout << "Changing config location." << endl;//debugging
+			curArg++;
+			configWorking.at(getIndOfKey(&configWorking, "logLoc")) = make_pair("logLoc", string(argv[curArg]));
+			outputText("c", "Log file set to: \"" + getVal(&configWorking, "logLoc") + "\"", true);
 		}else if(string(argv[curArg]) == "-s"){
-			setToStartOnStart = true;
+			setToRunAsServ = true;
 		}else if(string(argv[curArg]) == "-t"){
 			runTest = true;
-		}else{//debugging
-			//cout << endl;
+		}else{
+			outputText("c", "Invalid argument \"" + (string)(argv[curArg]) + "\", please use -h to see available commands.", true);
+			//return 1;
 		}
 		curArg++;
-	}
+	}//while processing arguments
 	//cout << "Done." << endl;
 	~curArg;
-
 
 	if(runTest){
 		test();
@@ -1346,10 +1404,12 @@ int main(int argc, char *argv[]){
 			"\tVersion: " << version << endl << endl <<
 			"Commands:" << endl <<
 			"\t-h        Display help." << endl <<
+			"\t-i        Initializes the config file (Also stops the program after initialization.)." << endl <<
 			"\t-r        Run the server." << endl <<
 			"\t-v        Verbose output." << endl <<
 			"\t-l        List files and folders used." << endl <<
-			"\t-s        Set this to be run on startup." << endl <<
+			"\t-s        Set this to be run as a service." << endl <<
+			"\t--log <loc> Set the location of the log file." << endl <<
 			"\t-c <loc>  Specify location of config file." << endl << endl;
 		return 0;
 	}
@@ -1357,6 +1417,16 @@ int main(int argc, char *argv[]){
 	/**
 		Read config file for configuration stuff, creating it as necessary.
 	*/
+
+	if(initFlag){
+		generateMainConfig();
+		if(!checkFilePath(confFileLoc, false) ){
+			outputText("c", "ERROR:: unable to create config file.", true);
+			return 1;
+		}
+		outputText("c", "Created config file. Be sure to change the settings to what you need them to be. File location: " + confFileLoc, true);
+		return 0;
+	}
 
 	if(!checkFilePath(confFileLoc, false) ){
 		outputText("c", "Unable to open config file. Creating a new one...", verbose);
@@ -1377,49 +1447,15 @@ int main(int argc, char *argv[]){
 			"\tStorage Directory: " << getVal(&configWorking, "storFolderLoc") << endl;
 	}
 
-	if(setToStartOnStart){
-		setRunOnStart();
-	}
-
-	if(runFlag){
+	if(setToRunAsServ){
+		runAsServ();
+	}else if(runFlag){
 		runServer();
 	}
 
-	if(!helpFlag && !runFlag && !listFlag && !setToStartOnStart){
+	if(!helpFlag && !runFlag && !listFlag && !setToRunAsServ){
 		outputText("c", "Not told to do anything. Use -h to see options.", verbose);
 	}
 
 	return 0;
 }//main()
-
-#ifdef _WIN32
-///////////////
-#pragma region Service - Sets up windows services functions.
-///////////////
-
-/////////////////
-#pragma endregion
-/////////////////
-#endif
-
-
-
-
-
-#ifdef __linux__
-///////////////
-#pragma region Daemon - Sets up linux daemon functions.
-///////////////
-
-void runDaemon(){
-	confFileLoc = "/etc/DBSS/" + confFileLoc;
-	configWorking.at(getIndOfKey(&configWorking, "logLoc")) = make_pair("logLoc", "/etc/DBSS/" + getVal(&configWorking, "logLoc"));
-	//make config?
-	ensureMainConfig();
-	//make log?
-}
-
-/////////////////
-#pragma endregion
-/////////////////
-#endif
