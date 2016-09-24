@@ -77,8 +77,6 @@ const string clientSyncFileListName = syncFileFold + foldSeparater + "DBSS_STORE
 const string clientSyncGetFileListName = syncFileFold + foldSeparater + "DBSS_TO_GET_LIST.txt";
 const string clientSyncIgnoreFileListName = syncFileFold + foldSeparater + "DBSS_IGNORE_LIST.txt";
 
-//int checkInterval = 60;//how often to wait between checking sync foldders in seconds
-
 /* for sync folder config */
 vector< pair<string, string> > syncConfigDefault {
 	make_pair("numBackupsToKeep", "-1")
